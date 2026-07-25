@@ -1,0 +1,40 @@
+# Runtime principal Python 3.12. El STT predeterminado es remoto y no carga CUDA.
+PyAudioWPatch>=0.2.12.7
+# Imports directos del runtime: no depender de que Whisper/pycaw los arrastren.
+numpy>=2.0
+# Decodifica notas de voz WebM/Opus del navegador; no ejecuta STT local.
+av>=18,<19
+psutil>=5.9
+comtypes>=1.4; platform_system == "Windows"
+mss>=9.0.1
+Pillow>=10.4.0
+# Render local y determinista de slides PDF oficiales para la lección final.
+# El import es diferido: clases legacy sin material oficial no dependen del renderer.
+pypdfium2==5.11.0
+openai>=1.60.0
+# Cliente HTTP directo para STT remoto; evita cuatro SDKs y sus dependencias.
+httpx>=0.27,<1
+# Movimiento reversible de cursos/clases a la Papelera (Windows y otros escritorios).
+Send2Trash==2.1.0
+
+# --- OCR opcional (código/texto de diapositivas). Si su instalación falla: comentar y continuar ---
+rapidocr-onnxruntime>=1.4.4
+# Backend preferente en Windows: proyecciones WinRT mínimas. Los marcadores
+# preservan la instalación portable; RapidOCR sigue siendo el fallback.
+winrt-runtime==3.2.1; platform_system == "Windows"
+winrt-Windows.Foundation==3.2.1; platform_system == "Windows"
+winrt-Windows.Globalization==3.2.1; platform_system == "Windows"
+winrt-Windows.Storage.Streams==3.2.1; platform_system == "Windows"
+winrt-Windows.Graphics.Imaging==3.2.1; platform_system == "Windows"
+winrt-Windows.Media.Ocr==3.2.1; platform_system == "Windows"
+
+# --- Audio por-aplicación (fuente navegador + modo enfoque). Opcional: degrada con gracia ---
+pycaw>=20240210
+
+# --- Panel web (interfaz amigable, localhost:8756). Python puro: inmune a SAC ---
+flask>=3.0
+markdown>=3.6
+# Fórmulas LaTeX -> MathML offline; evita delimitadores rotos y dependencias CDN.
+latex2mathml==3.81.0
+screeninfo>=0.8   # nombres amigables de monitores en el panel
+ddgs>=9.0   # busqueda web gratuita (DuckDuckGo) para enriquecer copiloto/apuntes/leccion

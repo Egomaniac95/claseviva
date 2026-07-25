@@ -1,0 +1,8 @@
+# Dependencias solo para desarrollo, QA y diagnosticos.
+# No forman parte del runtime minimo de ClaseViva.
+
+pytest>=9.1
+pytest-cov>=7.1
+pytest-timeout>=2.4
+hypothesis>=6.156
+ruff>=0.15

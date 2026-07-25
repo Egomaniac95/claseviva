@@ -1,0 +1,29 @@
+.env
+.venv/
+.cache/
+_bench/
+_debug/
+.codex/
+backups/
+logs/
+contenido/
+auditoria_recursos/
+__pycache__/
+.pytest_cache/
+*.pyc
+clase_actual.txt
+memoria_cursos.md
+
+# Herramientas y artefactos locales
+.claude/
+.coverage
+htmlcov/
+.hypothesis/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.py[cod]
+
+# Artefactos locales y herramientas retiradas
+claude-worktree-respaldo.patch
+*.patch
