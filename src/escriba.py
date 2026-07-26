@@ -21,6 +21,7 @@ from . import audio_manifest
 from . import config
 from . import estado as est
 from . import incremental_jsonl
+from . import local_interventions
 from . import ocr
 from . import student_notes
 from .deepseek_client import preguntar, preguntar_detalle
@@ -66,7 +67,14 @@ MAX_TOKENS_ESCRIBA = int(os.environ.get("CLASE_ESCRIBA_MAX_TOKENS", "3600"))
 RESUMEN_TRAMOS_JSONL = "resumen_tramos.jsonl"
 RE_IMG_MD_LOCAL = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 AUTO_RESUMEN_SEG = 5 * 60.0
+# Techo de espera: cubre el peor caso (un chunk que cruza la frontera mas su
+# commit). Con STT remoto la evidencia suele cerrarse mucho antes; el disparo
+# por cobertura confirmada usa este valor solo como respaldo.
 MARGEN_TRANSCRIPTOR_SEG = 45.0
+# El pipeline visual anexa su fila a img_log despues del OCR/JPEG del ciclo en
+# curso: una holgura corta evita adelantarse a una captura ya decidida.
+VISUAL_ASENTAMIENTO_SEG = float(
+    os.environ.get("CLASE_ESCRIBA_ASENTAMIENTO_VISUAL_SEG", "5"))
 DISPAROS_RESUMEN = frozenset({"manual", "auto", "fin"})
 ESTADO_ESCRIBA_SCHEMA_VERSION = 5
 MAX_CAPTURAS_RESUMEN = 8
@@ -1238,6 +1246,53 @@ def _ventana_auto_resuelta_sin_texto(
     return ahora >= deadline + AUTO_EMPTY_GRACE_SEG
 
 
+def evidencia_tramo_completa(d: Path, desde: float, hasta: float,
+                             ahora: float) -> bool:
+    """Confirma que el tramo ya tiene toda su evidencia antes del margen fijo.
+
+    El resumen resultante es el mismo que esperando el techo: ``hasta`` es la
+    frontera de captura util (funcion de las marcas, no del instante de
+    disparo), y aqui solo se comprueba que ninguna fuente pueda todavia aportar
+    texto a esa ventana. Ante cualquier duda devuelve False y manda al techo.
+    """
+    # Orden deliberado de barato a caro: el reloj no cuesta E/S y descarta la
+    # mayoria de los polls antes de tocar el manifest de una clase larga.
+    if ahora < hasta + VISUAL_ASENTAMIENTO_SEG:
+        return False
+    try:
+        # La voz del estudiante entra al mismo resumen y es idempotente: un
+        # borrador abierto o una extraccion pendiente aun puede aportar texto.
+        if local_interventions.pending_report(d).get("blocking"):
+            return False
+        if student_notes.pending_audio_notes(d, included_only=True):
+            return False
+        if student_notes.unresolved_local_interventions(d):
+            return False
+        latest = audio_manifest.latest_by_chunk(d)
+        if any(
+                row.get("status") == "capturing"
+                and _fila_audio_solapa(row, desde, hasta)
+                for row in latest.values()):
+            return False
+        finales = [
+            row for row in audio_manifest.capture_records(d)
+            if _fila_audio_solapa(row, desde, hasta)
+        ]
+        # Sin audio final que solape no hay cobertura que confirmar: la ventana
+        # vacia la resuelve el camino normal con su propia gracia.
+        if not finales:
+            return False
+        completos = audio_manifest.completed_transcript_chunks(
+            d, verify_files=False)
+        if any(str(row.get("chunk_id") or "") not in completos
+               for row in finales):
+            return False
+    except Exception as exc:
+        config.log_error("escriba-cobertura", f"{type(exc).__name__}: {exc}")
+        return False
+    return True
+
+
 def _registrar_ventana_auto_vacia(
         d: Path, parte: int, desde: float, hasta: float,
         deadline: float) -> None:
@@ -1568,6 +1623,22 @@ def main() -> int:
                 proximo_auto = float(plan_auto["due_wall_t"])
             auto_debido = bool(
                 plan_auto["due"] and ahora >= auto_retry_after)
+            if (not auto_debido
+                    and plan_auto["boundary_wall_t"] is not None
+                    and ahora >= auto_retry_after
+                    and est.estado_efectivo(st) == "grabando_activo"):
+                # Misma ventana que usaria el disparo por techo; solo cambia
+                # el instante en que se confirma que ya esta completa.
+                desde_cobertura = max(ultimo_auto, ultimo_manual, ultimo_final)
+                hasta_cobertura = max(
+                    float(plan_auto["boundary_wall_t"]), desde_cobertura + 1)
+                if evidencia_tramo_completa(
+                        d, desde_cobertura, hasta_cobertura, ahora):
+                    auto_debido = True
+                    print(
+                        "[escriba] evidencia del tramo completa antes del "
+                        f"margen de {MARGEN_TRANSCRIPTOR_SEG:g}s; "
+                        "resumen adelantado.")
         elif intervalo_auto is not None:
             auto_debido = (
                 efectivo == "grabando_activo"

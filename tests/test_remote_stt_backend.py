@@ -479,3 +479,58 @@ def test_panel_no_expone_whisper_local_y_preflight_antes_de_crear(monkeypatch):
 
     assert response.status_code == 409
     assert response.get_json()["reason"] == "stt_preflight_failed"
+
+
+def _aislar_inicio_info(monkeypatch, tmp_path):
+    """El endpoint de inicio recorre contenido real: se aísla en tmp_path."""
+    monkeypatch.setattr(panel, "MODO_APP", False)
+    monkeypatch.setattr(panel.config, "CONTENIDO_DIR", tmp_path / "contenido")
+    monkeypatch.setattr(panel.config, "PUNTERO_CLASE", tmp_path / "puntero.txt")
+    monkeypatch.setattr(panel, "_monitores", lambda: [])
+    monkeypatch.setattr(panel, "_dispositivos", lambda: [])
+
+
+def test_inicio_info_expone_default_de_consentimiento(monkeypatch, tmp_path):
+    _aislar_inicio_info(monkeypatch, tmp_path)
+    cliente = panel.app.test_client()
+
+    monkeypatch.delenv("CLASE_STT_REMOTE_CONSENT", raising=False)
+    apagado = cliente.get("/api/inicio_info").get_json()
+    monkeypatch.setenv("CLASE_STT_REMOTE_CONSENT", "1")
+    encendido = cliente.get("/api/inicio_info").get_json()
+
+    # Instalación nueva sin la variable: sigue pidiendo el consentimiento.
+    assert apagado["stt_remote_consent_default"] is False
+    assert encendido["stt_remote_consent_default"] is True
+
+
+def test_default_premarcado_no_sustituye_al_consentimiento_del_cliente(
+        monkeypatch, tmp_path):
+    """Con la variable activa, un POST sin la casilla debe seguir siendo 409."""
+    _aislar_inicio_info(monkeypatch, tmp_path)
+    monkeypatch.setenv("CLASE_STT_REMOTE_CONSENT", "1")
+    monkeypatch.setenv("ASSEMBLYAI_API_KEY", "fixture")
+    monkeypatch.setattr(panel, "MODO_APP", True)
+    monkeypatch.setattr(panel, "_clase", lambda: None)
+    monkeypatch.setattr(
+        panel.est, "crear_clase",
+        lambda *_a, **_k: pytest.fail("no debe mutar contenido"))
+    cliente = panel.app.test_client()
+
+    for cuerpo in (
+            {"tipo": "nueva", "tema": "fixture", "curso": "fixture",
+             "stt_backend": "remote"},
+            {"tipo": "nueva", "tema": "fixture", "curso": "fixture",
+             "stt_backend": "remote", "stt_remote_consent": False},
+    ):
+        respuesta = cliente.post("/api/iniciar", json=cuerpo)
+        assert respuesta.status_code == 409
+        assert respuesta.get_json()["reason"] == "stt_preflight_failed"
+
+
+def test_ui_toma_el_default_del_servidor_y_no_lo_hardcodea():
+    # La casilla no lleva `checked` en el HTML: el valor llega del endpoint,
+    # de modo que el default sigue siendo configurable y auditable.
+    assert '<input id="isttconsent" type="checkbox">' in panel.PAGINA
+    assert "INFO.stt_remote_consent_default" in panel.PAGINA
+    assert "stt_remote_consent_prefilled" in panel.PAGINA

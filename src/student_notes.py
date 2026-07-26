@@ -506,8 +506,13 @@ def transcribe_audio_note(class_dir: Path | str, note_id: str, *,
                           backend_name: str | None = None,
                           remote_consent: bool = False) -> dict:
     if teacher_capture_active and model is None:
+        # Con STT remoto la nota se transcribe durante la clase: el
+        # transcriptor la toma en cuanto su cola docente queda libre y le pasa
+        # su propio backend. Lo que sigue prohibido es abrir un segundo backend
+        # en paralelo al del transcriptor mientras la captura está activa.
         raise RuntimeError(
-            "la nota de voz se transcribe después de Fin para no competir con el STT docente")
+            "durante la captura la nota de voz se transcribe con el backend "
+            "del transcriptor; no se abre un segundo backend STT")
     if not _TRANSCRIBE_LOCK.acquire(blocking=False):
         raise RuntimeError("ya hay una nota de voz en transcripción")
     try:

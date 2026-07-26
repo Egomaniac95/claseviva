@@ -696,6 +696,57 @@ def _recortar_contexto_previo(lineas: list[dict], solape_reloj: float,
     return out
 
 
+_TAIL_SOLAPE_SEG = 5.0
+_ultimo_tail_solape: dict | None = None
+
+
+def _firma_wav(ruta: Path) -> tuple[str, int, int] | None:
+    try:
+        stat = ruta.stat()
+    except OSError:
+        return None
+    return (str(ruta), int(stat.st_mtime_ns), int(stat.st_size))
+
+
+def _guardar_tail_solape(ruta: Path, vel: float, datos: np.ndarray) -> None:
+    """Retiene el final del derivado post-WSOLA del chunk recién procesado.
+
+    Copia solo los últimos segundos: el bucle secuencial reutiliza ese tail como
+    solape del chunk siguiente sin recargar ni re-estirar el WAV anterior. La
+    firma (ruta, mtime, size) invalida el tail si el archivo cambiara en disco.
+    """
+    global _ultimo_tail_solape
+    firma = _firma_wav(ruta)
+    if firma is None:
+        return
+    muestras = max(1, round(_TAIL_SOLAPE_SEG * 16000))
+    _ultimo_tail_solape = {
+        "firma": firma,
+        "vel": float(vel),
+        "total_len": len(datos),
+        "tail": np.array(datos[-muestras:], copy=True),
+    }
+
+
+def _tail_solape_cacheado(ruta: Path, vel: float,
+                          muestras: int) -> np.ndarray | None:
+    """Tail bit-idéntico al recompute, o None para caer a la ruta actual."""
+    cache = _ultimo_tail_solape
+    if (cache is None or cache["firma"] != _firma_wav(ruta)
+            or abs(cache["vel"] - float(vel)) > 1e-9):
+        return None
+    tail = cache["tail"]
+    if muestras <= 0:
+        return tail[:0]
+    if len(tail) >= muestras:
+        return tail[-muestras:]
+    if cache["total_len"] == len(tail):
+        # El chunk anterior entero era más corto que la ventana pedida: el
+        # recompute usaría exactamente estas muestras (min(len, ventana)).
+        return tail
+    return None
+
+
 def transcribir_chunk(modelo, ruta: Path, contexto: str = "",
                       inicio_abs: float | None = None,
                       anterior: Path | None = None,
@@ -723,6 +774,10 @@ def transcribir_chunk(modelo, ruta: Path, contexto: str = "",
         return []
     if vel > 1.01:
         datos = estirar_wsola(datos, vel, sr=16000)
+    # Referencia al derivado post-WSOLA sin solape: es lo que un recompute del
+    # siguiente chunk obtendría, y se retiene recién después de consumir el
+    # tail del anterior (slot único).
+    datos_estirados = datos
     solape_estirado = 0.0
     permitir_solape_anterior = bool(
         permitir_solape_anterior
@@ -734,17 +789,23 @@ def transcribir_chunk(modelo, ruta: Path, contexto: str = "",
             # fisica. Una velocidad distinta si cambia la escala temporal.
             compatible = abs(vel_ant - vel) <= 0.01
             if compatible:
-                datos_ant = cargar_wav16k(anterior)
-                if vel_ant > 1.01:
-                    datos_ant = estirar_wsola(datos_ant, vel_ant, sr=16000)
                 segundos = max(0.0, float(os.environ.get(
                     "CLASE_STT_CROSS_CHUNK_OVERLAP_SEG", "1.5")))
-                n = min(len(datos_ant), round(segundos * 16000))
+                muestras = round(segundos * 16000)
+                tail = _tail_solape_cacheado(anterior, vel_ant, muestras)
+                if tail is None:
+                    datos_ant = cargar_wav16k(anterior)
+                    if vel_ant > 1.01:
+                        datos_ant = estirar_wsola(datos_ant, vel_ant, sr=16000)
+                    n = min(len(datos_ant), muestras)
+                    tail = datos_ant[-n:] if n else datos_ant[:0]
+                n = len(tail)
                 if n:
-                    datos = np.concatenate((datos_ant[-n:], datos))
+                    datos = np.concatenate((tail, datos))
                     solape_estirado = n / 16000.0
         except (OSError, ValueError, IndexError):
             solape_estirado = 0.0
+    _guardar_tail_solape(ruta, vel, datos_estirados)
     datos, diag_gain = normalizar_audio_whisper(datos)
     if diag_gain.get("applied"):
         print(f"[transcriptor] normalizado {ruta.name}: "

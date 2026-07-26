@@ -180,3 +180,99 @@ def test_revalidacion_acepta_wav_legacy_estable_sin_evento_manifest(tmp_path):
 
     assert transcriptor_vivo.validar_audio_input(
         clase, ruta, snapshot, row) == row
+
+
+def _wav16k(path, muestras):
+    import wave
+
+    with wave.open(str(path), "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(16000)
+        handle.writeframes(muestras.astype("<i2").tobytes())
+
+
+def _patron(semilla: int, muestras: int = 32000):
+    return (((np.arange(muestras) * semilla) % 997) - 498) * 6
+
+
+def _modelo_grabador():
+    class Grabador:
+        whole_chunk = True
+
+        def __init__(self):
+            self.recibido = []
+
+        def transcribe(self, datos, **_kwargs):
+            self.recibido.append(np.array(datos, copy=True))
+            segmento = SimpleNamespace(
+                start=0.1, end=0.5, text=" hola", avg_logprob=-0.1,
+                no_speech_prob=0.0, compression_ratio=1.0)
+            info = SimpleNamespace(language="es", language_probability=0.99)
+            return [segmento], info
+
+    return Grabador()
+
+
+def test_tail_solape_cacheado_es_bit_identico_al_recompute(monkeypatch, tmp_path):
+    a = tmp_path / "chunk_000000000200_p1_v10.wav"
+    b = tmp_path / "chunk_000000000230_p1_v10.wav"
+    _wav16k(a, _patron(7))
+    _wav16k(b, _patron(11))
+    cargas: list[str] = []
+    original_cargar = transcriptor_vivo.cargar_wav16k
+
+    def cargar_contado(path):
+        cargas.append(str(path))
+        return original_cargar(path)
+
+    monkeypatch.setattr(transcriptor_vivo, "cargar_wav16k", cargar_contado)
+
+    # Pasada con cache: el tail del chunk A se reutiliza al procesar B.
+    monkeypatch.setattr(transcriptor_vivo, "_ultimo_tail_solape", None)
+    modelo_cache = _modelo_grabador()
+    transcriptor_vivo.transcribir_chunk(modelo_cache, a, inicio_abs=200.0)
+    transcriptor_vivo.transcribir_chunk(
+        modelo_cache, b, inicio_abs=230.0, anterior=a)
+    cargas_con_cache = len(cargas)
+
+    # Pasada de control sin cache: B recarga y re-deriva el WAV anterior.
+    monkeypatch.setattr(transcriptor_vivo, "_ultimo_tail_solape", None)
+    monkeypatch.setattr(
+        transcriptor_vivo, "_guardar_tail_solape", lambda *_a, **_k: None)
+    modelo_control = _modelo_grabador()
+    transcriptor_vivo.transcribir_chunk(modelo_control, a, inicio_abs=200.0)
+    transcriptor_vivo.transcribir_chunk(
+        modelo_control, b, inicio_abs=230.0, anterior=a)
+
+    # 1.5 s de solape + 2 s del chunk actual, bit a bit iguales en ambas rutas.
+    assert len(modelo_cache.recibido[1]) == 24000 + 32000
+    assert np.array_equal(modelo_cache.recibido[1], modelo_control.recibido[1])
+    assert cargas_con_cache == 2  # A y B una vez; el anterior no se recarga
+    assert len(cargas) == 5  # el control sí recarga A al procesar B
+
+
+def test_tail_solape_se_invalida_si_el_wav_anterior_cambia(monkeypatch, tmp_path):
+    a = tmp_path / "chunk_000000000200_p1_v10.wav"
+    b = tmp_path / "chunk_000000000230_p1_v10.wav"
+    _wav16k(a, _patron(7))
+    _wav16k(b, _patron(11))
+    monkeypatch.setattr(transcriptor_vivo, "_ultimo_tail_solape", None)
+    modelo = _modelo_grabador()
+    transcriptor_vivo.transcribir_chunk(modelo, a, inicio_abs=200.0)
+
+    # El WAV anterior cambia en disco (otro tamaño): el tail retenido ya no
+    # es válido y el solape debe recomputarse desde el archivo real.
+    _wav16k(a, _patron(13, muestras=33600))
+    cargas: list[str] = []
+    original_cargar = transcriptor_vivo.cargar_wav16k
+
+    def cargar_contado(path):
+        cargas.append(str(path))
+        return original_cargar(path)
+
+    monkeypatch.setattr(transcriptor_vivo, "cargar_wav16k", cargar_contado)
+    transcriptor_vivo.transcribir_chunk(modelo, b, inicio_abs=230.0, anterior=a)
+
+    assert any(ruta.endswith(a.name) for ruta in cargas)
+    assert len(modelo.recibido[1]) == 24000 + 32000

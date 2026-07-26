@@ -91,6 +91,27 @@ def _contexto_uso_api() -> dict:
         return {}
 
 
+def _tokens_cache_prefijo(usage) -> dict:
+    """Copia los contadores de caché por prefijo que reporte el proveedor.
+
+    Solo registra lo que la API devuelve (nunca deriva valores): DeepSeek expone
+    prompt_cache_hit_tokens/prompt_cache_miss_tokens y, en el formato OpenAI,
+    prompt_tokens_details.cached_tokens. Sin estos campos el costo real del
+    input (hit ~10x más barato) es inauditable.
+    """
+    fila: dict = {}
+    hit = getattr(usage, "prompt_cache_hit_tokens", None)
+    miss = getattr(usage, "prompt_cache_miss_tokens", None)
+    if hit is None:
+        detalles = getattr(usage, "prompt_tokens_details", None)
+        hit = getattr(detalles, "cached_tokens", None)
+    if isinstance(hit, int):
+        fila["tokens_cache_hit"] = hit
+    if isinstance(miss, int):
+        fila["tokens_cache_miss"] = miss
+    return fila
+
+
 def _log_uso(respuesta, etiqueta: str, usage_id: str | None = None) -> None:
     try:
         u = respuesta.usage
@@ -104,6 +125,7 @@ def _log_uso(respuesta, etiqueta: str, usage_id: str | None = None) -> None:
             "usage_id": str(
                 usage_id or getattr(respuesta, "id", "") or uuid.uuid4().hex),
         }
+        fila.update(_tokens_cache_prefijo(u))
         fila.update(_contexto_uso_api())
         path = config.LOGS_DIR / "uso_api.jsonl"
         with _USAGE_LOG_LOCK, _usage_file_lock(path):

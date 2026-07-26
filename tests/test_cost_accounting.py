@@ -66,6 +66,57 @@ def test_deepseek_log_uso_atribuye_clase_activa(monkeypatch, tmp_path):
     assert "api_key" not in fila
     assert "sk-" not in json.dumps(fila, ensure_ascii=False)
     assert fila["costo_usd"] > 0
+    # Sin campos de caché del proveedor, la fila no inventa contadores.
+    assert "tokens_cache_hit" not in fila
+    assert "tokens_cache_miss" not in fila
+
+
+def test_deepseek_log_uso_registra_tokens_de_cache_del_proveedor(
+        monkeypatch, tmp_path):
+    _aislar_entorno(monkeypatch, tmp_path)
+    estado.crear_clase("Costo cache", curso="curso-costos")
+
+    class _UsageConCache:
+        prompt_tokens = 1000
+        completion_tokens = 500
+        prompt_cache_hit_tokens = 640
+        prompt_cache_miss_tokens = 360
+
+    class _RespuestaConCache:
+        usage = _UsageConCache()
+
+    deepseek_client._log_uso(_RespuestaConCache(), "unit-cache")
+
+    fila = estado.leer_jsonl(config.LOGS_DIR / "uso_api.jsonl")[-1]
+    assert fila["tokens_cache_hit"] == 640
+    assert fila["tokens_cache_miss"] == 360
+    # El costo registrado no cambia: los contadores son solo visibilidad.
+    assert fila["costo_usd"] == round(
+        (1000 * config.COSTO_ENTRADA_USD_M
+         + 500 * config.COSTO_SALIDA_USD_M) / 1_000_000, 6)
+
+
+def test_deepseek_log_uso_acepta_cached_tokens_formato_openai(
+        monkeypatch, tmp_path):
+    _aislar_entorno(monkeypatch, tmp_path)
+    estado.crear_clase("Costo cache openai", curso="curso-costos")
+
+    class _Detalles:
+        cached_tokens = 128
+
+    class _UsageOpenAI:
+        prompt_tokens = 1000
+        completion_tokens = 500
+        prompt_tokens_details = _Detalles()
+
+    class _RespuestaOpenAI:
+        usage = _UsageOpenAI()
+
+    deepseek_client._log_uso(_RespuestaOpenAI(), "unit-cache-openai")
+
+    fila = estado.leer_jsonl(config.LOGS_DIR / "uso_api.jsonl")[-1]
+    assert fila["tokens_cache_hit"] == 128
+    assert "tokens_cache_miss" not in fila
 
 
 def test_api_estado_muestra_gasto_sesion_y_curso_sin_total_global(

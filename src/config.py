@@ -94,6 +94,20 @@ def student_notes_enabled() -> bool:
     }
 
 
+def stt_remote_consent_default() -> bool:
+    """Premarca la casilla de envío remoto; NO sustituye al consentimiento.
+
+    Autorización permanente que el usuario declara en su propio .env para no
+    repetir el clic en cada inicio. El servidor sigue exigiendo la casilla real
+    en la petición y el preflight sigue rechazando sin ella: esto solo decide
+    cómo llega marcada la casilla al navegador. Desactivada por defecto para
+    que una instalación nueva siga pidiendo el consentimiento explícito.
+    """
+    return os.environ.get("CLASE_STT_REMOTE_CONSENT", "0").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+
+
 def loopback_qpc_recovery_enabled() -> bool:
     """Rollback explícito de la reconstrucción de silencios del loopback virtual."""
     return os.environ.get("CLASE_LOOPBACK_QPC_RECOVERY", "1").strip().lower() not in {
@@ -185,8 +199,10 @@ CAPTURA_HEARTBEAT_SEG = max(
     CAPTURA_INTERVALO,
     float(os.environ.get("CLASE_CAPTURA_HEARTBEAT_SEG", "10")),
 )
+# Nadie consume visual_capture_health en runtime; 60 s reduce a la mitad los
+# fsync de telemetría sobre session_state.json sin tocar el material del curso.
 CAPTURA_TELEMETRIA_SEG = max(
-    5.0, float(os.environ.get("CLASE_CAPTURA_TELEMETRIA_SEG", "30")))
+    5.0, float(os.environ.get("CLASE_CAPTURA_TELEMETRIA_SEG", "60")))
 CAPTURA_METRICAS_MUESTRAS = max(
     32, int(os.environ.get("CLASE_CAPTURA_METRICAS_MUESTRAS", "256")))
 REGION = os.environ.get("CLASE_REGION", "").strip()  # "left,top,width,height" o vacío

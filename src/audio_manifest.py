@@ -339,10 +339,13 @@ def _legacy_row(path: Path, sequence: int) -> dict | None:
     }
 
 
+def _audio_dir(target: str | Path) -> Path:
+    return Path(target) if Path(target).name == "audio" else _class_dir(target) / "audio"
+
+
 def infer_legacy(target: str | Path) -> list[dict]:
     """Infiere metadata desde WAV legacy sin escribir ni migrar evidencia."""
-    class_dir = _class_dir(target)
-    audio_dir = Path(target) if Path(target).name == "audio" else class_dir / "audio"
+    audio_dir = _audio_dir(target)
     if not audio_dir.is_dir():
         return []
     rows = []
@@ -353,22 +356,28 @@ def infer_legacy(target: str | Path) -> list[dict]:
     return rows
 
 
-def capture_records(target: str | Path) -> list[dict]:
-    events = read_events(target)
+def capture_records(target: str | Path,
+                    events: list[dict] | None = None) -> list[dict]:
+    if events is None:
+        events = read_events(target)
     if not events:
         return infer_legacy(target)
     latest = latest_by_chunk_rows(events)
     rows = capture_records_from_events(events)
     represented = {str(r.get("chunk_id") or "") for r in rows}
-    for legacy in infer_legacy(target):
-        previous = latest.get(str(legacy.get("chunk_id") or ""))
-        if legacy["chunk_id"] in represented:
-            continue
-        # Un WAV cuyo productor sigue en `capturing` puede existir entre rename
-        # y publicación final. Solo el capturador lo recupera; STT debe esperar.
-        if previous:
-            continue
-        rows.append(dict(legacy, inferred_with_manifest=True))
+    audio_dir = _audio_dir(target)
+    if audio_dir.is_dir():
+        # La numeración legacy cuenta la posición en el glob completo; los stems
+        # ya cubiertos se saltan sin abrir su WAV, pero conservan su número.
+        for sequence, wav_path in enumerate(sorted(audio_dir.glob("chunk_*.wav")), 1):
+            chunk_id = wav_path.stem
+            # Un WAV cuyo productor sigue en `capturing` puede existir entre rename
+            # y publicación final. Solo el capturador lo recupera; STT debe esperar.
+            if chunk_id in represented or chunk_id in latest:
+                continue
+            legacy = _legacy_row(wav_path, sequence)
+            if legacy:
+                rows.append(dict(legacy, inferred_with_manifest=True))
     return _sort_capture_records(rows)
 
 
@@ -780,15 +789,18 @@ def _legacy_transcript_lines(target: str | Path) -> list[dict]:
     return rows
 
 
-def _manifest_managed_chunks(target: str | Path) -> set[str]:
+def _manifest_managed_chunks(target: str | Path,
+                             latest: dict[str, dict] | None = None) -> set[str]:
     """Chunks nuevos cuyo estado canonico exige un commit transaccional.
 
     Los eventos `inferred_legacy` creados por versiones previas son una migracion
     incompleta: no deben convertir retroactivamente su transcript en parcial.
     """
+    if latest is None:
+        latest = latest_by_chunk(target)
     return {
         chunk_id
-        for chunk_id, row in latest_by_chunk(target).items()
+        for chunk_id, row in latest.items()
         if row.get("status") in FINAL_CAPTURE_STATES
         and not row.get("inferred_legacy")
         and bool(row.get("transactional_stt_required") or row.get("sha256"))
@@ -813,8 +825,9 @@ def _journal_chunk_ids(target: str | Path) -> set[str]:
 
 
 def _preserved_legacy_lines(target: str | Path,
-                            committed_ids: set[str]) -> list[dict]:
-    managed = _manifest_managed_chunks(target)
+                            committed_ids: set[str],
+                            latest: dict[str, dict] | None = None) -> list[dict]:
+    managed = _manifest_managed_chunks(target, latest=latest)
     journal_ids = _journal_chunk_ids(target)
     return [
         line for line in _legacy_transcript_lines(target)
@@ -826,26 +839,63 @@ def _preserved_legacy_lines(target: str | Path,
 
 
 def completed_transcript_chunks(target: str | Path,
-                                verify_files: bool = True) -> set[str]:
-    commits = _commit_files(target)
-    latest = latest_by_chunk(target)
+                                verify_files: bool = True,
+                                latest: dict[str, dict] | None = None,
+                                commits: list[dict] | None = None) -> set[str]:
+    if commits is None:
+        commits = [data for _path, data in _commit_files(target)]
+    if latest is None:
+        latest = latest_by_chunk(target)
     complete = {
-        str(data.get("chunk_id")) for _path, data in commits
+        str(data.get("chunk_id")) for data in commits
         if _commit_matches_audio(target, data, latest, verify_file=verify_files)
     }
     legacy = {
         Path(str(row["chunk"])).stem
-        for row in _preserved_legacy_lines(target, complete)
+        for row in _preserved_legacy_lines(target, complete, latest=latest)
         if row.get("chunk")
     }
     return complete | legacy
 
 
+def _journal_snapshot(
+        target: str | Path) -> tuple[dict[str, tuple[object, str]], set[str]]:
+    """Una sola pasada por el journal: payload por commit y stagings huérfanos.
+
+    Un commit ilegible se conserva como (None, "commit_corrupt") en vez de
+    propagar la excepción: solo diverge del lector anterior ante evidencia ya
+    corrupta, y lo hace clasificando en lugar de crashear.
+    """
+    journal = _class_dir(target) / JOURNAL_DIR
+    payloads: dict[str, tuple[object, str]] = {}
+    partials: set[str] = set()
+    if not journal.is_dir():
+        return payloads, partials
+    for path in journal.iterdir():
+        name = path.name
+        if ".json.part" in name:
+            partials.add(name.split(".json.part", 1)[0] + ".json")
+            continue
+        if not name.endswith(".json"):
+            continue
+        try:
+            payloads[name] = (json.loads(path.read_text(encoding="utf-8")), "")
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            payloads[name] = (None, "commit_corrupt")
+    return payloads, partials
+
+
 def transcript_status_report(target: str | Path,
                              verify_files: bool = True) -> dict:
-    """Clasifica STT por commit canónico, con fallback legacy conservador."""
+    """Clasifica STT por commit canónico, con fallback legacy conservador.
+
+    Manifest, journal y WAV legacy se leen una sola vez por invocación; todas
+    las vistas derivadas comparten ese snapshot.
+    """
     class_dir = _class_dir(target)
-    records = capture_records(class_dir)
+    events = read_events(class_dir)
+    latest = latest_by_chunk_rows(events)
+    records = capture_records(class_dir, events=events)
     paths: dict[str, str] = {}
     captured: set[str] = set()
     available: set[str] = set()
@@ -884,9 +934,14 @@ def transcript_status_report(target: str | Path,
                 except OSError:
                     pass
 
+    payloads, partials = _journal_snapshot(class_dir)
+    commits_completos = [
+        data for data, error in payloads.values()
+        if not error and isinstance(data, dict) and data.get("status") == "complete"
+    ]
     legacy_completed = completed_transcript_chunks(
-        class_dir, verify_files=verify_files)
-    latest = latest_by_chunk(class_dir)
+        class_dir, verify_files=verify_files, latest=latest,
+        commits=commits_completos)
     completed: list[str] = []
     empty_completed: list[str] = []
     pending: list[str] = []
@@ -896,24 +951,22 @@ def transcript_status_report(target: str | Path,
     states: dict[str, str] = {}
     has_journal_files = False
     committed_segment_count = 0
+    stt_submitted_audio_seconds = 0.0
 
     for chunk_id in sorted(captured):
-        commit_path = _commit_path(class_dir, chunk_id)
-        partial_paths = list(commit_path.parent.glob(f"{commit_path.name}.part*"))
+        commit_name = _commit_path(class_dir, chunk_id).name
+        entry = payloads.get(commit_name)
         data = None
         commit_error = ""
-        if commit_path.is_file():
+        if entry is not None:
             has_journal_files = True
-            try:
-                data = json.loads(commit_path.read_text(encoding="utf-8"))
-            except (OSError, UnicodeError, json.JSONDecodeError):
-                commit_error = "commit_corrupt"
+            data, commit_error = entry
             if not commit_error:
                 commit_error = _commit_payload_error(data, expected_chunk_id=chunk_id)
             if (not commit_error and not _commit_matches_audio(
                     class_dir, data, latest=latest, verify_file=verify_files)):
                 commit_error = "commit_audio_mismatch"
-        elif partial_paths:
+        elif commit_name in partials:
             has_journal_files = True
             commit_error = "commit_partial_file"
 
@@ -930,6 +983,10 @@ def transcript_status_report(target: str | Path,
             committed_segment_count += len(lineas_commit)
             if not lineas_commit:
                 empty_completed.append(chunk_id)
+            metadata_commit = data.get("metadata")
+            if isinstance(metadata_commit, dict):
+                stt_submitted_audio_seconds += max(0.0, _float(
+                    metadata_commit.get("stt_submitted_audio_seconds"), 0.0))
         elif chunk_id in legacy_completed:
             completed.append(chunk_id)
             states[chunk_id] = "complete_legacy"
@@ -968,6 +1025,9 @@ def transcript_status_report(target: str | Path,
         "completed_count": len(completed),
         "empty_completed_count": len(empty_completed),
         "segment_count": committed_segment_count,
+        # Segundos de audio realmente enviados al STT (pared x velocidad): hace
+        # visible el costo del proveedor que uso_api.jsonl no contabiliza.
+        "stt_submitted_audio_seconds_total": round(stt_submitted_audio_seconds, 3),
         "pending_count": len(pending),
         "invalid_count": len(invalid),
         "actionable_count": len(actionable),

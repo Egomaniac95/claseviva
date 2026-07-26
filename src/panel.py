@@ -1183,6 +1183,8 @@ async function cargarInfo(force){try{if(INFO&&!force)return;INFO=await api('/api
   fillSourceSelect('imon',INFO.monitores,'idx','etiqueta');
   fillSourceSelect('idispositivo',INFO.dispositivos,'id','etiqueta');
  const backend=document.getElementById('isttbackend');if(backend&&INFO.stt_backend)backend.value=INFO.stt_backend;
+ const consent=document.getElementById('isttconsent');
+ if(consent&&INFO.stt_remote_consent_default!==undefined)consent.checked=!!INFO.stt_remote_consent_default;
  sttBackendChanged();cambioCurso()}catch(e){toast('no pude cargar cursos: '+e,true)}}
 function cambioCurso(){const v=document.getElementById('icurso').value;
  document.getElementById('campo_curso_nuevo').style.display=(v=='__nuevo__')?'':'none';cambioTipo();updateContentAdmin()}
@@ -1219,7 +1221,8 @@ async function iniciarClase(el){return runBusy(el,'Empezando...',async()=>{try{
   fuente:document.getElementById('ifuente').value,
   dispositivo:document.getElementById('idispositivo').value,
   stt_backend:document.getElementById('isttbackend').value,
-  stt_remote_consent:document.getElementById('isttconsent').checked});
+  stt_remote_consent:document.getElementById('isttconsent').checked,
+  stt_remote_consent_prefilled:!!(INFO&&INFO.stt_remote_consent_default)});
  if(s.ok!==false)SESION_VISUAL=true;
  toast(s.msg,!s.ok);INFO=null;refrescar()}catch(e){toast('error iniciando: '+e,true)}})}
 async function cmd(c,el){return runBusy(el,'Aplicando...',async()=>{try{
@@ -2942,7 +2945,10 @@ def api_inicio_info():
                     "recovered_deletions": recovered_deletions,
                     "clases": clases, "monitores": _monitores(),
                     "dispositivos": _dispositivos(),
-                    "stt_backend": stt_backend.configured_backend()})
+                    "stt_backend": stt_backend.configured_backend(),
+                    # Solo premarca la casilla en el navegador; el consentimiento
+                    # sigue viajando en el POST y decidiéndose en el preflight.
+                    "stt_remote_consent_default": config.stt_remote_consent_default()})
 
 
 @app.post("/api/contenido/vista_previa_eliminar")
@@ -3095,6 +3101,10 @@ def _iniciar_interno():
     cambios["audio_diag"] = ""
     cambios["stt_backend_requested"] = selected_backend
     cambios["stt_remote_consent"] = bool(remote_consent)
+    # Procedencia auditable: distingue un clic explícito de una casilla que
+    # llegó premarcada por CLASE_STT_REMOTE_CONSENT. Nunca alimenta el preflight.
+    cambios["stt_remote_consent_prefilled"] = bool(
+        dd.get("stt_remote_consent_prefilled", False))
     cambios["stt_provider"] = stt_check.get("provider", "")
     cambios["stt_model"] = stt_check.get("model", "")
     if fuente != "sistema":

@@ -31,7 +31,8 @@ def _texto_resultado(resultado) -> str:
 
 
 def _preparar_imagen(img: Image.Image) -> Image.Image:
-    candidata = img.convert("RGB")
+    # convert() al mismo modo copia ~6 MB por frame; los backends solo leen.
+    candidata = img if img.mode == "RGB" else img.convert("RGB")
     ancho_max = max(320, int(getattr(config, "CAPTURA_ANCHO_MAX", 1920)))
     if candidata.width > ancho_max:
         alto = max(1, round(candidata.height * ancho_max / candidata.width))
