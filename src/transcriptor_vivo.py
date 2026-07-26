@@ -533,8 +533,7 @@ def _ventanas_audio(datos: np.ndarray, sr: int = 16000) -> list[tuple[float, np.
 
 
 def _transcribir_audio(modelo, datos: np.ndarray, epoch: float, parte: int, vel: float,
-                       contexto: str, kw: dict, opciones: dict | None = None) -> list[dict]:
-    opciones = opciones or {}
+                       contexto: str, kw: dict) -> list[dict]:
     lineas: list[dict] = []
     ultimo_fin_estirado = -1.0
     solape_tol = max(0.2, float(os.environ.get("CLASE_STT_OVERLAP_SEG", "1.5")) * 0.65)
@@ -543,22 +542,12 @@ def _transcribir_audio(modelo, datos: np.ndarray, epoch: float, parte: int, vel:
         else _ventanas_audio(datos)
     )
     for offset, frag in ventanas:
-        transcribe_kw = {
-            "vad_filter": opciones.get("vad_filter", True),
-            "beam_size": opciones.get("beam_size", 5),
-            "initial_prompt": contexto or None,
-            "condition_on_previous_text": opciones.get("condition_on_previous_text", False),
-            "temperature": opciones.get("temperature", 0),
-        }
-        if opciones.get("strict"):
-            transcribe_kw.update({
-                "compression_ratio_threshold": float(os.environ.get(
-                    "CLASE_STT_STRICT_COMPRESSION", "1.8")),
-                "log_prob_threshold": float(os.environ.get(
-                    "CLASE_STT_STRICT_LOGPROB", "-0.5")),
-                "no_speech_threshold": float(os.environ.get(
-                    "CLASE_STT_STRICT_NO_SPEECH", "0.35")),
-            })
+        # De la cadena remota solo Groq lee `initial_prompt` (stt_backend.py:622)
+        # y el idioma llega en `kw`; AssemblyAI, Deepgram y Speechmatics absorben
+        # el resto en **_kwargs. Los ajustes de decodificación de Whisper local
+        # (vad_filter, beam_size, temperature, condition_on_previous_text y los
+        # umbrales estrictos) se retiraron al quedar sin ningún lector.
+        transcribe_kw = {"initial_prompt": contexto or None}
         transcribe_kw.update(kw)
         segments, info = modelo.transcribe(
             frag,
@@ -823,9 +812,10 @@ def transcribir_chunk(modelo, ruta: Path, contexto: str = "",
             modelo, datos, base_epoch, parte, vel, contexto_chunk, kw)
 
     def retry():
+        # Reservado por contrato de transcribir_con_reintento, que hoy filtra en
+        # local y nunca lo invoca: no se paga una segunda petición al proveedor.
         return _transcribir_audio(
-            modelo, datos, base_epoch, parte, vel, "", kw,
-            {"vad_filter": True, "condition_on_previous_text": False, "strict": True})
+            modelo, datos, base_epoch, parte, vel, "", kw)
 
     lineas, diag = transcribir_con_reintento(base, retry)
     if diag.get("retry"):
