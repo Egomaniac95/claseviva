@@ -163,20 +163,30 @@ def _sanear_error(e: Exception) -> str:
 
 def preguntar_detalle(mensajes: list[dict], max_tokens: int = 2048,
                       temperature: float = 0.3, etiqueta: str = "",
-                      timeout: float | None = None) -> dict:
+                      timeout: float | None = None, *,
+                      thinking: bool | None = None) -> dict:
     """Llama a la API y devuelve texto + finish_reason sin lanzar al llamador."""
     timeout = _timeout_efectivo(max_tokens, timeout)
     ultimo_error = ""
     usage_id = uuid.uuid4().hex
     for intento in range(3):
         try:
-            r = _cliente().chat.completions.create(
+            request = dict(
                 model=config.DEEPSEEK_MODEL,
                 messages=mensajes,
                 max_tokens=max_tokens,
                 temperature=temperature,
                 timeout=timeout,
             )
+            # DeepSeek V4 Flash habilita razonamiento por defecto. El control es
+            # deliberadamente triestado y por llamada: ``None`` conserva el
+            # contrato previo (Copiloto); Escriba/Post pueden desactivarlo para
+            # que el presupuesto de salida produzca contenido visible.
+            if thinking is not None:
+                request["extra_body"] = {
+                    "thinking": {"type": "enabled" if thinking else "disabled"}
+                }
+            r = _cliente().chat.completions.create(**request)
             _log_uso(r, etiqueta, usage_id=usage_id)
             choice = r.choices[0]
             texto = choice.message.content if choice.message else None
@@ -198,11 +208,12 @@ def preguntar_detalle(mensajes: list[dict], max_tokens: int = 2048,
 
 
 def preguntar(mensajes: list[dict], max_tokens: int = 2048, temperature: float = 0.3,
-              etiqueta: str = "", timeout: float | None = None) -> str | None:
+              etiqueta: str = "", timeout: float | None = None, *,
+              thinking: bool | None = None) -> str | None:
     """Llama a la API con 3 intentos y backoff. Devuelve el texto o None (jamás lanza)."""
     return preguntar_detalle(
         mensajes, max_tokens=max_tokens, temperature=temperature,
-        etiqueta=etiqueta, timeout=timeout).get("texto")
+        etiqueta=etiqueta, timeout=timeout, thinking=thinking).get("texto")
 
 
 def costo_acumulado() -> float:

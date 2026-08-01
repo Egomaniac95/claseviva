@@ -3,7 +3,8 @@
 Por cada bloque toma: transcript nuevo + capturas nuevas (+OCR) -> DeepSeek V4 Flash
 -> anexa a leccion_en_vivo.md un bloque de apuntes, conceptos, código explicado y enlaces.
 Las IMÁGENES las inserta este script de forma determinista (el LLM nunca inventa rutas).
-Si la API falla, guarda el transcript crudo del bloque: NUNCA se pierde información.
+Si la API falla, no publica una ficha incompleta: el transcript canónico y la evidencia
+permanecen intactos para el siguiente tramo y la consolidación final.
 
 Test (1 llamada real a la API):  python -m src.escriba --test
 """
@@ -76,7 +77,7 @@ MARGEN_TRANSCRIPTOR_SEG = 45.0
 VISUAL_ASENTAMIENTO_SEG = float(
     os.environ.get("CLASE_ESCRIBA_ASENTAMIENTO_VISUAL_SEG", "5"))
 DISPAROS_RESUMEN = frozenset({"manual", "auto", "fin"})
-ESTADO_ESCRIBA_SCHEMA_VERSION = 5
+ESTADO_ESCRIBA_SCHEMA_VERSION = 6
 MAX_CAPTURAS_RESUMEN = 8
 AUTO_EMPTY_GRACE_SEG = 120.0
 MAX_CONTEXTO_PEDAGOGICO_CHARS = 6000
@@ -86,6 +87,51 @@ MAX_PROMPT_USUARIO_CHARS = (
     MAX_CONTEXTO_PEDAGOGICO_CHARS + MAX_TRANSCRIPT_RESUMEN_CHARS
     + MAX_OCR_RESUMEN_CHARS + 1200
 )
+
+
+def _web_enrichment_enabled() -> bool:
+    return os.environ.get("CLASE_ESCRIBA_WEB", "0") == "1"
+
+
+def _prompt_sistema_escriba() -> str:
+    """No exige metadatos de búsqueda cuando esa función está desactivada."""
+    if _web_enrichment_enabled():
+        return PROMPT_SISTEMA
+    base = PROMPT_SISTEMA.split("\nAL FINAL,", 1)[0].rstrip()
+    return base + "\nNo añadas una línea BUSCAR: en esta ejecución."
+
+
+def _registro_resumen_completo(registro: dict) -> bool:
+    """Un parcial histórico es evidencia, no estado pedagógico publicable."""
+    return str(registro.get("estado", "") or "") in {"", "generado"}
+
+
+def registro_ficha_publicable(registro: dict) -> bool:
+    """Distingue una ficha pedagógica de un cierre crudo ya confirmado."""
+    if not _registro_resumen_completo(registro):
+        return False
+    motivos = {str(x) for x in (registro.get("motivos") or [])}
+    cuerpo = str(registro.get("cuerpo", "") or "").lstrip()
+    return (
+        "cierre_corto_preservado" not in motivos
+        and not cuerpo.startswith("### Transcripción cruda preservada")
+    )
+
+
+def _registro_resultado_terminal(registro: dict) -> bool:
+    """Un parcial conserva evidencia, pero no confirma que el tramo esté resuelto."""
+    return str(registro.get("estado", "") or "") in {
+        "", "generado", "sin_transcript",
+    }
+
+
+def _registro_cursor_recuperable(registro: dict) -> bool:
+    """Una semilla acumulada cubre contexto; un parcial vacío no cubre contenido."""
+    estado_registro = str(registro.get("estado", "") or "")
+    return (
+        estado_registro in {"", "generado", "sin_transcript"}
+        or bool(str(registro.get("estado_pedagogico", "") or "").strip())
+    )
 
 
 def _evidence_path_signature(path: Path) -> tuple[int, int, int] | None:
@@ -328,12 +374,13 @@ def _cursores_confirmados(
     for registro in est.leer_jsonl(path.parent / RESUMEN_TRAMOS_JSONL):
         disparo = str(registro.get("disparo", "") or "")
         t_fin = max(inicio, _numero_finito(registro.get("t_fin"), inicio))
-        if disparo == "auto":
-            ultimo_auto = max(ultimo_auto, t_fin)
-        if disparo == "manual":
-            ultimo_manual = max(ultimo_manual, t_fin)
-        if disparo == "fin":
-            ultimo_final = max(ultimo_final, t_fin)
+        if _registro_cursor_recuperable(registro):
+            if disparo == "auto":
+                ultimo_auto = max(ultimo_auto, t_fin)
+            if disparo == "manual":
+                ultimo_manual = max(ultimo_manual, t_fin)
+            if disparo == "fin":
+                ultimo_final = max(ultimo_final, t_fin)
         if disparo == "auto":
             deadline = _numero_finito(
                 registro.get("auto_deadline_t"), t_fin + MARGEN_TRANSCRIPTOR_SEG)
@@ -362,7 +409,15 @@ def _cargar_estado_escriba(
         clave in datos
         for clave in ("ultimo_auto_t", "ultimo_manual_t", "ultimo_final_t")
     )
-    if formato_nuevo:
+    schema = _numero_finito(datos.get("schema_version"), 0)
+    journal_presente = bool(est.leer_jsonl(path.parent / RESUMEN_TRAMOS_JSONL))
+    if formato_nuevo and schema < ESTADO_ESCRIBA_SCHEMA_VERSION and journal_presente:
+        # Schema 5 llegó a persistir respuestas parciales como si cubrieran la
+        # ventana. El journal durable permite migrar sin adivinar: se retrocede
+        # solo hasta la última ficha/semilla útil; el ancla conserva la grilla.
+        ultimo_auto_t = confirmado_auto
+        ultimo_manual_t = confirmado_manual
+    elif formato_nuevo:
         ultimo_auto_t = max(
             inicio, _numero_finito(datos.get("ultimo_auto_t"), legacy_t))
         ultimo_manual_t = max(
@@ -374,11 +429,14 @@ def _cargar_estado_escriba(
         ultimo_manual_t = legacy_t
     ultimo_auto_t = max(ultimo_auto_t, confirmado_auto)
     ultimo_manual_t = max(ultimo_manual_t, confirmado_manual)
-    ultimo_final_t = max(
-        inicio,
-        _numero_finito(datos.get("ultimo_final_t"), inicio),
-        confirmado_final,
-    )
+    if schema < ESTADO_ESCRIBA_SCHEMA_VERSION and journal_presente:
+        ultimo_final_t = confirmado_final
+    else:
+        ultimo_final_t = max(
+            inicio,
+            _numero_finito(datos.get("ultimo_final_t"), inicio),
+            confirmado_final,
+        )
 
     # El cursor manual evita duplicar contenido, pero nunca mueve la grilla automática.
     cursor_cubierto = max(ultimo_auto_t, ultimo_final_t)
@@ -387,18 +445,39 @@ def _cargar_estado_escriba(
     # Recalcular repara estados schema 4 que pudieron persistir un reanclaje manual.
     # La grilla de pared es siempre un múltiplo del intervalo desde ``inicio``.
     proximo_auto_t = proximo_defecto
+    anchor_persistido = _numero_finito(datos.get("auto_anchor_t"), inicio)
+    if schema >= 5 and anchor_persistido > ultimo_auto_t:
+        # Un resumen parcial consume la frontera de calendario, no el contenido.
+        # En reloj de pared este valor evita un nuevo cobro inmediato tras reinicio;
+        # en captura útil ``planificar_auto_captura_util`` usa el mismo ancla.
+        proximo_auto_t = max(
+            proximo_auto_t,
+            _proximo_auto_legacy(
+                inicio, anchor_persistido + MARGEN_TRANSCRIPTOR_SEG, intervalo),
+        )
     if deadline_confirmado is not None:
         proximo_auto_t = max(proximo_auto_t, deadline_confirmado + intervalo)
     return ultimo_auto_t, ultimo_manual_t, ultimo_final_t, proximo_auto_t
 
 
 def _cargar_auto_anchor(path: Path, inicio: float, ultimo_auto_t: float) -> float:
-    """Recupera solo el cursor automático; ignora reanclajes manuales schema 4."""
+    """Recupera la frontera automática, incluidos intentos parciales ya cobrados."""
     inicio = _numero_finito(inicio, time.time())
     anchor = max(inicio, _numero_finito(ultimo_auto_t, inicio))
+    if path.is_file():
+        try:
+            datos = json.loads(path.read_text(encoding="utf-8"))
+            if (isinstance(datos, dict)
+                    and _numero_finito(datos.get("schema_version"), 0) >= 5):
+                anchor = max(
+                    anchor,
+                    _numero_finito(datos.get("auto_anchor_t"), inicio),
+                )
+        except (OSError, json.JSONDecodeError):
+            pass
     for registro in est.leer_jsonl(path.parent / RESUMEN_TRAMOS_JSONL):
         disparo = str(registro.get("disparo", "") or "")
-        if disparo == "auto":
+        if disparo == "auto" and _registro_resumen_completo(registro):
             anchor = max(
                 anchor, _numero_finito(registro.get("t_fin"), inicio))
     return anchor
@@ -505,6 +584,62 @@ def _termina_cortado(cuerpo: str) -> bool:
     return bool(re.search(r"[A-Za-zÁÉÍÓÚÑáéíóúñ]{3,}$", ultima))
 
 
+def _secciones_nucleo_faltantes(cuerpo: str) -> list[str]:
+    texto = str(cuerpo or "")
+    coincidencias = list(re.finditer(
+        r"^#{2,5}\s+(?P<titulo>.+?)\s*$", texto,
+        flags=re.MULTILINE,
+    ))
+    secciones: list[tuple[str, str]] = []
+    for indice, match in enumerate(coincidencias):
+        fin = coincidencias[indice + 1].start() if indice + 1 < len(coincidencias) else len(texto)
+        secciones.append((
+            match.group("titulo").casefold(),
+            texto[match.end():fin].strip(),
+        ))
+    esperadas = {
+        "panorama": (
+            "panorama acumulado de la clase", "panorama hasta ahora",
+            "hilo de la clase hasta ahora",
+        ),
+        "desarrollo": (
+            "desarrollo detallado del tramo actual", "lo nuevo en este tramo",
+            "apuntes del tramo",
+        ),
+        "contexto": (
+            "contexto acumulado para continuar", "contexto para continuar",
+        ),
+    }
+    return [
+        nombre for nombre, variantes in esperadas.items()
+        if not any(
+            variante in titulo and len(re.findall(r"\w+", contenido)) >= 2
+            for titulo, contenido in secciones
+            for variante in variantes
+        )
+    ]
+
+
+def _cobertura_literal_transcript(cuerpo: str, transcript: str,
+                                  ngram: int = 8) -> float:
+    """Fracción de secuencias docentes largas copiadas literalmente en la ficha."""
+    fuente = re.findall(r"\w+", str(transcript or "").casefold())
+    salida = re.findall(r"\w+", str(cuerpo or "").casefold())
+    if len(fuente) < 80 or len(salida) < ngram:
+        return 0.0
+    ventanas_fuente = [
+        tuple(fuente[i:i + ngram])
+        for i in range(len(fuente) - ngram + 1)
+    ]
+    ventanas_salida = {
+        tuple(salida[i:i + ngram])
+        for i in range(len(salida) - ngram + 1)
+    }
+    coincidencias = sum(
+        ventana in ventanas_salida for ventana in ventanas_fuente)
+    return coincidencias / max(1, len(ventanas_fuente))
+
+
 def motivos_respuesta_incompleta(cuerpo: str | None, finish_reason: str | None,
                                  transcript: str, ocr_texto: str) -> list[str]:
     motivos: list[str] = []
@@ -513,34 +648,66 @@ def motivos_respuesta_incompleta(cuerpo: str | None, finish_reason: str | None,
         return ["respuesta_vacia"]
     if finish_reason == "length":
         motivos.append("finish_reason=length")
-    if not _linea_buscar(texto):
+    if _web_enrichment_enabled() and not _linea_buscar(texto):
         motivos.append("falta_BUSCAR")
     if _markdown_abierto(texto):
         motivos.append("markdown_abierto")
     if _termina_cortado(texto):
         motivos.append("final_sin_cierre")
     material = len((transcript or "").strip()) + len((ocr_texto or "").strip())
+    if material >= 120:
+        faltantes = _secciones_nucleo_faltantes(texto)
+        if faltantes:
+            motivos.append("faltan_secciones_nucleo=" + ",".join(faltantes))
+    if _cobertura_literal_transcript(texto, transcript) >= 0.55:
+        motivos.append("copia_excesiva_transcript")
     if material >= 1800 and len(texto) < max(350, int(material * 0.06)):
         motivos.append("respuesta_demasiado_corta")
     return motivos
 
 
-def _continuar_respuesta(mensajes_base: list[dict], parcial: str,
-                         transcript: str, ocr_texto: str) -> tuple[str, list[str]]:
-    mensajes = list(mensajes_base) + [
-        {"role": "assistant", "content": parcial},
+def _continuar_respuesta(parcial: str, transcript: str, ocr_texto: str,
+                         contexto_previo: str,
+                         motivos_previos: list[str] | None = None
+                         ) -> tuple[str, list[str]]:
+    """Hace un único rescate compacto sin reenviar el prompt largo completo."""
+    instruccion_buscar = (
+        "Termina con una línea BUSCAR: y 3-5 palabras clave en inglés."
+        if _web_enrichment_enabled()
+        else "No añadas una línea BUSCAR:."
+    )
+    mensajes = [
+        {"role": "system", "content": (
+            "Eres un editor pedagógico. Reescribe una ficha Markdown completa y "
+            "autocontenida a partir del borrador y la evidencia acotada. Prioriza "
+            "Panorama acumulado, Desarrollo detallado del tramo actual y Contexto "
+            "para continuar; añade conceptos clave y una pregunta de recuperación "
+            "si caben. No copies la transcripción cruda ni inventes información. "
+            + instruccion_buscar
+        )},
         {"role": "user", "content": (
-            "Continúa exactamente desde donde se cortó, sin repetir lo anterior, "
-            "cerrando secciones Markdown y terminando con BUSCAR: <3-5 palabras clave "
-            "en inglés del concepto central>."
+            "BORRADOR INCOMPLETO:\n"
+            + _recortar_evidencia_nueva(parcial, 2200)
+            + "\n\nESTADO PEDAGÓGICO ANTERIOR ACOTADO:\n"
+            + _recortar_evidencia_nueva(contexto_previo, 2200)
+            + "\n\nTRANSCRIPCIÓN NUEVA ACOTADA:\n"
+            + _recortar_evidencia_nueva(transcript, 4000)
+            + "\n\nOCR NUEVO ACOTADO:\n"
+            + _recortar_evidencia_nueva(ocr_texto, 1200)
         )},
     ]
-    detalle = preguntar_detalle(mensajes, max_tokens=1800, etiqueta="escriba-continuacion")
+    detalle = preguntar_detalle(
+        mensajes, max_tokens=1800, etiqueta="escriba-reintento-compacto",
+        thinking=False)
     cont = (detalle.get("texto") or "").strip()
-    unido = (parcial.rstrip() + "\n" + cont).strip() if cont else parcial.strip()
+    if not cont:
+        motivos = list(dict.fromkeys([
+            *(motivos_previos or []), "reintento_sin_respuesta",
+        ]))
+        return parcial.strip(), motivos
     motivos = motivos_respuesta_incompleta(
-        unido, detalle.get("finish_reason"), transcript, ocr_texto)
-    return unido, motivos
+        cont, detalle.get("finish_reason"), transcript, ocr_texto)
+    return cont, motivos
 
 
 def _quitar_buscar_y_enriquecer(cuerpo: str) -> str:
@@ -549,7 +716,7 @@ def _quitar_buscar_y_enriquecer(cuerpo: str) -> str:
         return cuerpo.strip()
     consulta = m.group(1).strip()[:80]
     cuerpo = cuerpo[:m.start()].rstrip()
-    if os.environ.get("CLASE_ESCRIBA_WEB", "0") != "1":
+    if not _web_enrichment_enabled():
         return cuerpo.strip()
     try:
         from . import web
@@ -623,6 +790,20 @@ def resumenes_acumulados_md(
         registros = [r for r in registros if _registro_en_parte(r, parte)]
     if not registros:
         return ""
+    completos = [r for r in registros if registro_ficha_publicable(r)]
+    if completos:
+        registros = completos
+    else:
+        # Migración no destructiva para sesiones afectadas por respuestas
+        # truncadas: una semilla pedagógica explícita es utilizable como contexto,
+        # pero nunca se publica el cuerpo parcial ni el transcript crudo.
+        rescatables = [
+            r for r in registros
+            if str(r.get("estado_pedagogico", "") or "").strip()
+        ]
+        registros = rescatables[-1:] if rescatables else []
+        if not registros:
+            return ""
     for registro in reversed(registros):
         estado = str(registro.get("estado_pedagogico", "") or "").strip()
         if not estado:
@@ -717,6 +898,9 @@ def _quitar_ruido_vista(cuerpo: str, max_chars: int | None = 2200) -> str:
     txt = RE_IMG_MD_LOCAL.sub("", str(cuerpo or ""))
     txt = re.sub(r"^BUSCAR:.*$", "", txt, flags=re.MULTILINE)
     txt = re.split(r"\n#{3,5}[^\n]*Para profundizar \(web\)", txt, maxsplit=1)[0]
+    txt = re.split(
+        r"(?:^|\n)#{3,5}[^\n]*Transcripción cruda preservada[^\n]*",
+        txt, maxsplit=1, flags=re.IGNORECASE)[0]
     txt = re.sub(r"\n{3,}", "\n\n", txt).strip()
     if max_chars is not None and len(txt) > max_chars:
         txt = txt[:max_chars].rsplit("\n", 1)[0].rstrip() + "\n\n..."
@@ -807,7 +991,35 @@ def vista_leccion_vivo_resumen(
         txt = lec.read_text(encoding="utf-8") if lec.is_file() else ""
         return _quitar_ruido_vista(txt, max_chars=max_chars)
 
-    ultimo = registros[-1]
+    ultimo_registro = registros[-1]
+    completos = [r for r in registros if registro_ficha_publicable(r)]
+    if not completos:
+        semilla = next((
+            str(r.get("estado_pedagogico", "") or "").strip()
+            for r in reversed(registros)
+            if str(r.get("estado_pedagogico", "") or "").strip()
+        ), "")
+        lineas = [
+            "# Pausa de estudio",
+            "",
+            f"> Resumen pedagógico pendiente hasta **{ultimo_registro.get('rango', '')}**. "
+            "El transcript y la evidencia están conservados; una ficha incompleta no "
+            "se publica como material de estudio.",
+        ]
+        if semilla:
+            lineas.extend([
+                "",
+                "## 🧭 Contexto recuperado",
+                "",
+                _decorar_ficha_estudio(semilla, max_chars=max_chars),
+            ])
+        salida = "\n".join(lineas).strip()
+        return salida if max_chars is None else salida[:max_chars].rstrip()
+    ultimo = completos[-1]
+    hay_parcial_posterior = (
+        not registro_ficha_publicable(ultimo_registro)
+        and ultimo_registro is not ultimo
+    )
     body_limit = None if max_chars is None else max(1000, max_chars - 900)
     cuerpo_ultimo = _decorar_ficha_estudio(
         str(ultimo.get("cuerpo", "") or ""), max_chars=body_limit)
@@ -819,6 +1031,14 @@ def vista_leccion_vivo_resumen(
         "",
         cuerpo_ultimo,
     ]
+    if hay_parcial_posterior:
+        lineas.extend([
+            "",
+            "## ⏳ Resumen pendiente",
+            "",
+            "> El tramo más reciente aún no produjo una ficha completa. Su transcript "
+            "y evidencia permanecen conservados y no reemplazan esta última ficha válida.",
+        ])
     pendiente = _transcript_pendiente_md(
         d, float(ultimo.get("t_fin", 0) or 0), int(parte))
     if pendiente:
@@ -921,16 +1141,19 @@ def generar_resumen_en_vivo(texto: str, ocr_junto: str, rango: str,
     ])
     prompt_usuario = "\n".join(piezas)
     mensajes = [
-        {"role": "system", "content": PROMPT_SISTEMA},
+        {"role": "system", "content": _prompt_sistema_escriba()},
         {"role": "user", "content": prompt_usuario},
     ]
     detalle = preguntar_detalle(
-        mensajes, max_tokens=MAX_TOKENS_ESCRIBA, etiqueta="escriba")
+        mensajes, max_tokens=MAX_TOKENS_ESCRIBA, etiqueta="escriba",
+        thinking=False)
     cuerpo = (detalle.get("texto") or "").strip()
     motivos = motivos_respuesta_incompleta(
         cuerpo, detalle.get("finish_reason"), texto_tramo, ocr_junto)
-    if cuerpo and motivos:
-        cuerpo, motivos = _continuar_respuesta(mensajes, cuerpo, texto_tramo, ocr_junto)
+    if motivos:
+        cuerpo, motivos = _continuar_respuesta(
+            cuerpo, texto_tramo, ocr_junto, contexto,
+            motivos_previos=motivos)
     if not cuerpo:
         return {
             "estado": "parcial",
@@ -1354,6 +1577,8 @@ def _anexar_bloque_idempotente(d: Path, resumen_id: str, bloque: str) -> None:
 
 
 def _restaurar_bloque_confirmado(d: Path, registro: dict) -> None:
+    if not registro_ficha_publicable(registro):
+        return
     resumen_id = str(registro.get("resumen_id", "") or "")
     cuerpo = str(registro.get("cuerpo", "") or "")
     rango = str(registro.get("rango", "") or "")
@@ -1379,6 +1604,8 @@ def _resumen_confirmado(
     esperado = _resumen_id(disparo, parte, desde, hasta)
     for registro in est.leer_jsonl(d / RESUMEN_TRAMOS_JSONL):
         if registro.get("resumen_id") == esperado:
+            if not _registro_resultado_terminal(registro):
+                continue
             _restaurar_bloque_confirmado(d, registro)
             return registro
         if (
@@ -1387,6 +1614,8 @@ def _resumen_confirmado(
             and math.isclose(_numero_finito(registro.get("t_ini"), -1), desde, abs_tol=1e-6)
             and math.isclose(_numero_finito(registro.get("t_fin"), -1), hasta, abs_tol=1e-6)
         ):
+            if not _registro_resultado_terminal(registro):
+                continue
             _restaurar_bloque_confirmado(d, registro)
             return registro
     return None
@@ -1484,6 +1713,17 @@ def procesar_bloque(d: Path, desde: float, hasta: float, parte: int,
         "motivos": resultado.get("motivos", []),
     }
 
+    if resultado["estado"] != "generado":
+        # Transcript, OCR e imágenes ya son evidencia durable. Un borrador
+        # incompleto no debe convertirse en ficha canónica ni consumir el cursor:
+        # el automático reintentará una sola vez en la siguiente frontera y el
+        # botón manual quedará disponible para una nueva pulsación consciente.
+        print(
+            f"[escriba] bloque {rango} pendiente; ficha incompleta no publicada "
+            f"({', '.join(resultado.get('motivos', [])) or 'sin detalle'})"
+        )
+        return False
+
     links_extra = extraer_links(texto, ocr_junto)
     resumen_id = _resumen_id(disparo, parte, desde, hasta)
     bloque = construir_bloque(
@@ -1524,12 +1764,12 @@ def procesar_bloque(d: Path, desde: float, hasta: float, parte: int,
 def modo_test() -> int:
     """Prueba el prompt con texto sintético (1 llamada real, ~$0.0001)."""
     cuerpo = preguntar(
-        [{"role": "system", "content": PROMPT_SISTEMA},
+        [{"role": "system", "content": _prompt_sistema_escriba()},
          {"role": "user", "content": "TRANSCRIPCIÓN (17:00–17:03):\nEl perceptrón usa una "
           "función escalón, por eso no funciona con descenso por gradiente, necesitamos "
           "funciones diferenciables como la sigmoide.\n\nTEXTO OCR DE PANTALLA:\n"
           "def sigmoid(x):\n  return 1/(1+np.exp(-x))"}],
-        max_tokens=600, etiqueta="escriba-test")
+        max_tokens=600, etiqueta="escriba-test", thinking=False)
     if cuerpo is None:
         print("TEST_FALLO: la API no respondió")
         return 1
@@ -1706,6 +1946,7 @@ def main() -> int:
                     resumen_t=time.time())
             else:
                 info_bloque = getattr(procesar_bloque, "ultimo_estado", {}) or {}
+                estado_intento = info_bloque.get("estado") or ""
                 if bloque_generado:
                     if disparo == "auto":
                         auto_fallos = 0
@@ -1713,7 +1954,7 @@ def main() -> int:
                     else:
                         manual_fallos = 0
                         manual_retry_after = 0.0
-                    estado_resumen = info_bloque.get("estado") or "generado"
+                    estado_resumen = estado_intento or "generado"
                     msg_resumen = info_bloque.get("msg") or "Resumen generado."
                     if estado_resumen == "parcial":
                         msg_resumen = "Resumen parcial; transcript conservado"
@@ -1738,6 +1979,31 @@ def main() -> int:
                     _guardar_estado_escriba(
                         estado_propio, ultimo_auto, ultimo_manual, proximo_auto,
                         ultimo_final_t=ultimo_final, auto_anchor_t=auto_anchor)
+                elif estado_intento == "parcial":
+                    # No repetir una llamada cobrada cada cinco segundos. La
+                    # grilla avanza a la siguiente frontera, pero el cursor de
+                    # contenido queda atrás: el siguiente resumen cubre también
+                    # esta evidencia pendiente.
+                    if auto_debido:
+                        auto_anchor = hasta
+                        proximo_auto = _avanzar_proximo_auto(
+                            proximo_auto, ahora, intervalo=intervalo_auto)
+                        auto_fallos = 0
+                        auto_retry_after = 0.0
+                        _guardar_estado_escriba(
+                            estado_propio, ultimo_auto, ultimo_manual, proximo_auto,
+                            ultimo_final_t=ultimo_final, auto_anchor_t=auto_anchor)
+                    else:
+                        manual_fallos = 0
+                        manual_retry_after = 0.0
+                    est.actualizar_estado(
+                        d, resumen_estado="parcial",
+                        resumen_msg=(
+                            "La ficha quedó pendiente; transcript y evidencia "
+                            "están conservados. Se reintentará con el próximo "
+                            "tramo automático o al volver a pulsar Resumir."
+                        ),
+                        resumen_t=time.time())
                 else:
                     ventana_vacia = bool(
                         auto_debido
@@ -1767,8 +2033,15 @@ def main() -> int:
                             resumen_msg=("No hay suficiente transcripción nueva para resumir. "
                                          "La solicitud sigue pendiente mientras Whisper termina."),
                             resumen_t=time.time())
-            pedido_atendido = pedido_debido and bloque_generado and (
-                not auto_debido or manual_satisfecho_por_auto)
+            parcial_actual = (
+                (getattr(procesar_bloque, "ultimo_estado", {}) or {}).get("estado")
+                == "parcial"
+            )
+            pedido_atendido = pedido_debido and (
+                (bloque_generado and (
+                    not auto_debido or manual_satisfecho_por_auto))
+                or parcial_actual
+            )
             if pedido_atendido:
                 est.actualizar_estado(
                     d, resumir=False, resumen_solicitado_t=0.0)

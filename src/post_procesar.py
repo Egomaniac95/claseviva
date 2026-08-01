@@ -34,6 +34,7 @@ from . import audio_manifest
 from . import config
 from . import costos_api
 from . import estado as est
+from . import escriba
 from . import imagen
 from . import incremental_jsonl
 from . import math_render
@@ -6472,6 +6473,9 @@ def _post_llm_enabled() -> bool:
     }
 
 
+POST_LLM_PROFILE = "deepseek-visible-output-v1"
+
+
 def preguntar_cacheado(d: Path, msgs: list[dict], max_tokens: int,
                        etiqueta: str, prompt_version: str) -> str | None:
     """Cache local opcional para reprocesar la misma tanda sin nueva llamada."""
@@ -6490,9 +6494,13 @@ def preguntar_cacheado(d: Path, msgs: list[dict], max_tokens: int,
     if cache_config in {"0", "false", "no", "off"}:
         preguntar_cacheado.ultimo_reporte = {"cache": "off", "hit": False}
         _cache_stats_note(hit=False, cache_on=False)
-        return preguntar(msgs, max_tokens=max_tokens, etiqueta=etiqueta)
+        return preguntar(
+            msgs, max_tokens=max_tokens, etiqueta=etiqueta, thinking=False)
     contenido = "\n\n".join(str(m.get("content", "")) for m in msgs)
-    key = cache_llm_key(prompt_version, contenido)
+    # El perfil forma parte del contrato de salida. No reutilizar respuestas
+    # cacheadas cuando el proveedor razonaba dentro del mismo max_tokens y podía
+    # devolver el contenido visible vacío o truncado.
+    key = cache_llm_key(f"{prompt_version}:{POST_LLM_PROFILE}", contenido)
     cache_dir = d / "_debug" / "cache_llm"
     cache_dir.mkdir(parents=True, exist_ok=True)
     path = cache_dir / f"{key}.md"
@@ -6500,7 +6508,8 @@ def preguntar_cacheado(d: Path, msgs: list[dict], max_tokens: int,
         preguntar_cacheado.ultimo_reporte = {"cache": "on", "hit": True, "key": key}
         _cache_stats_note(hit=True, cache_on=True)
         return path.read_text(encoding="utf-8")
-    r = preguntar(msgs, max_tokens=max_tokens, etiqueta=etiqueta)
+    r = preguntar(
+        msgs, max_tokens=max_tokens, etiqueta=etiqueta, thinking=False)
     if not _respuesta_vacia(r):
         path.write_text(str(r), encoding="utf-8")
     preguntar_cacheado.ultimo_reporte = {"cache": "on", "hit": False, "key": key}
@@ -6568,6 +6577,11 @@ def _limpiar_resumen_tramo(txt: str, max_chars: int = 1600) -> str:
     txt = RE_MD_IMG.sub("", str(txt or ""))
     txt = RE_HTML_IMG.sub("", txt)
     txt = RE_BUSCAR.sub("", txt)
+    txt = re.sub(
+        r"^#{2,6}\s+Transcripci[oó]n cruda preservada\s*$.*?"
+        r"(?=^#{2,6}\s+|\Z)",
+        "", txt, flags=re.MULTILINE | re.DOTALL | re.IGNORECASE,
+    )
     txt = re.sub(r"\n{3,}", "\n\n", txt).strip()
     if len(txt) > max_chars:
         txt = txt[:max_chars].rsplit("\n", 1)[0].rstrip()
@@ -6586,18 +6600,40 @@ def resumenes_tramos_rango(d: Path, t_ini: float, t_fin: float, origen,
         "verificar contra transcript y slides):",
         "",
     ]
-    total = 0
+    coincidentes: list[tuple[dict, float, float]] = []
     for r in registros:
         ri = _normalizar_valor_tiempo(r.get("t_ini", 0), origen)
         rf = _normalizar_valor_tiempo(r.get("t_fin", ri), origen)
         if rf < a or ri > b:
             continue
-        cuerpo = _limpiar_resumen_tramo(str(r.get("cuerpo", "") or ""))
+        coincidentes.append((r, ri, rf))
+
+    publicables = [
+        item for item in coincidentes
+        if escriba.registro_ficha_publicable(item[0])
+    ]
+    if publicables:
+        candidatos = [
+            (r, ri, rf, str(r.get("cuerpo", "") or ""), "generado")
+            for r, ri, rf in publicables
+        ]
+    else:
+        semillas = [
+            (r, ri, rf, str(r.get("estado_pedagogico", "") or ""),
+             "semilla_pedagogica")
+            for r, ri, rf in coincidentes
+            if str(r.get("estado_pedagogico", "") or "").strip()
+        ]
+        candidatos = semillas[-1:]
+
+    total = 0
+    for r, ri, rf, texto, estado_contexto in candidatos:
+        cuerpo = _limpiar_resumen_tramo(texto)
         if not cuerpo:
             continue
         capturas = ", ".join(str(x) for x in (r.get("imagenes") or [])[:5])
         meta = f"- {r.get('rango', fmt_t(ri, origen) + '-' + fmt_t(rf, origen))}"
-        meta += f" | estado={r.get('estado', '')}"
+        meta += f" | estado={estado_contexto}"
         if capturas:
             meta += f" | imagenes={capturas}"
         bloque = meta + "\n" + cuerpo + "\n"
@@ -7767,7 +7803,7 @@ def extraer_tareas(d: Path, contenido: str, clase_id: str) -> str | None:
         return None
     r = preguntar([{"role": "system", "content": PROMPT_TAREAS},
                    {"role": "user", "content": contenido[:30000]}],
-                  max_tokens=800, etiqueta="post-tareas")
+                  max_tokens=800, etiqueta="post-tareas", thinking=False)
     if _respuesta_vacia(r) or "SIN_TAREAS" in str(r):
         return None
     seccion = ("\n---\n\n## 📋 Tareas detectadas en esta clase\n"
@@ -8047,7 +8083,8 @@ def generar_leccion_ingles(d: Path, final_es: str, st: dict) -> Path:
     for i, trozo in enumerate(_trocear_texto(final_es), 1):
         r = preguntar([{"role": "system", "content": PROMPT_FINAL_ENG},
                        {"role": "user", "content": trozo}],
-                      max_tokens=POST_MAX_TOKENS, etiqueta=f"post-eng-{i}")
+                      max_tokens=POST_MAX_TOKENS, etiqueta=f"post-eng-{i}",
+                      thinking=False)
         if _respuesta_vacia(r):
             r = ("## Generation note\n\nThe API did not return this English section. "
                  "The Spanish study version remains the source of truth.\n")

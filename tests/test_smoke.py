@@ -549,7 +549,7 @@ def main() -> int:
         preguntar_orig = post_procesar.preguntar
         fuentes_orig = post_procesar.fuentes_ampliadas_md
 
-        def fake_preguntar(msgs, max_tokens=0, etiqueta=""):
+        def fake_preguntar(msgs, max_tokens=0, etiqueta="", **_kwargs):
             user_msg = msgs[-1]["content"] if msgs else ""
             llamadas.append((etiqueta, user_msg))
             if etiqueta.startswith("post-chunk-p1-"):
@@ -640,7 +640,7 @@ def main() -> int:
                                  "texto": f"FALLBACK_RAW_MARKER_{i:02d} detalle tecnico " * 8})
         preguntar_orig = post_procesar.preguntar
 
-        def fake_vacio(_msgs, max_tokens=0, etiqueta=""):
+        def fake_vacio(_msgs, max_tokens=0, etiqueta="", **_kwargs):
             if etiqueta.startswith("post-chunk") or etiqueta.startswith("post-merge") \
                     or etiqueta == "post-resumen":
                 return "   "
@@ -676,7 +676,7 @@ def main() -> int:
         preguntar_orig = post_procesar.preguntar
         fuentes_orig = post_procesar.fuentes_ampliadas_md
 
-        def fake_english(_msgs, max_tokens=0, etiqueta=""):
+        def fake_english(_msgs, max_tokens=0, etiqueta="", **_kwargs):
             if etiqueta.startswith("post-chunk-p1-"):
                 return ("## Training section\nENGLISH_PART_MARKER explains model evaluation.\n"
                         "[[IMG:cap_en.jpg|Training curve tied to the English transcript.]]\n"
@@ -999,7 +999,7 @@ def main() -> int:
               f"-> {segmentos_pub}")
         preguntar_orig_extra = post_procesar.preguntar
 
-        def fake_extra(msgs, max_tokens=0, etiqueta=""):
+        def fake_extra(msgs, max_tokens=0, etiqueta="", **_kwargs):
             if etiqueta.startswith("post-extra"):
                 return "## Lección adicional generada\nEnglish literature poetry grammar."
             return "SIN_TAREAS"
@@ -1022,7 +1022,7 @@ def main() -> int:
         preguntar_orig_ctx = post_procesar.preguntar
         fuentes_orig_ctx = post_procesar.fuentes_ampliadas_md
 
-        def fake_ctx(msgs, max_tokens=0, etiqueta=""):
+        def fake_ctx(msgs, max_tokens=0, etiqueta="", **_kwargs):
             user_msg = msgs[-1]["content"] if msgs else ""
             if etiqueta.startswith("post-chunk"):
                 return "## Material nuevo\nBackpropagation nuevo explicado."
@@ -1058,7 +1058,7 @@ def main() -> int:
         env_cache_orig = os.environ.get("CLASE_POST_CACHE")
         llamadas_cache = []
 
-        def fake_cache(msgs, max_tokens=0, etiqueta=""):
+        def fake_cache(msgs, max_tokens=0, etiqueta="", **_kwargs):
             llamadas_cache.append(etiqueta)
             return "RESPUESTA CACHEADA"
 
@@ -1394,7 +1394,7 @@ def main() -> int:
                                  "texto": (f"OMIT_{i}_TRANSCRIPT {evidencia} " * 8)})
         preguntar_orig = post_procesar.preguntar
 
-        def fake_omite_imgs(msgs, max_tokens=0, etiqueta=""):
+        def fake_omite_imgs(msgs, max_tokens=0, etiqueta="", **_kwargs):
             user_msg = msgs[-1]["content"] if msgs else ""
             if etiqueta.startswith("post-chunk"):
                 refs = re.findall(r"SLIDE \d+: ([^\s]+)", user_msg)
@@ -1478,7 +1478,7 @@ def main() -> int:
         )
         preguntar_orig = post_procesar.preguntar
 
-        def fake_slide_post(msgs, max_tokens=0, etiqueta=""):
+        def fake_slide_post(msgs, max_tokens=0, etiqueta="", **_kwargs):
             user_msg = msgs[-1]["content"] if msgs else ""
             if etiqueta.startswith("post-chunk"):
                 refs = re.findall(r"SLIDE \d+: ([^\s]+)", user_msg)
@@ -1717,7 +1717,7 @@ def main() -> int:
         old_chars = post_procesar.POST_CHUNK_MAX_CHARS
         llamadas_mr = []
 
-        def fake_map_reduce(msgs, max_tokens=0, etiqueta=""):
+        def fake_map_reduce(msgs, max_tokens=0, etiqueta="", **_kwargs):
             user_msg = msgs[-1]["content"] if msgs else ""
             llamadas_mr.append((etiqueta, user_msg))
             if etiqueta.startswith("post-chunk"):
@@ -1775,17 +1775,24 @@ def main() -> int:
     check("construir_bloque encabezado", "## ⏱️ 17:00–17:03 · Parte 1" in bloque)
     limpiar_buscar_orig = escriba._quitar_buscar_y_enriquecer
     detalle_orig = escriba.preguntar_detalle
+    escriba_web_orig = os.environ.get("CLASE_ESCRIBA_WEB")
     try:
         escriba._quitar_buscar_y_enriquecer = (
             lambda cuerpo: cuerpo.split("BUSCAR:", 1)[0].strip())
         llamadas = []
 
-        def fake_truncado(_msgs, max_tokens=0, etiqueta=""):
+        def fake_truncado(_msgs, max_tokens=0, etiqueta="", **_kwargs):
             llamadas.append(etiqueta)
             if len(llamadas) == 1:
                 return {"texto": "### Apuntes\n- La corteza visual prim",
                         "finish_reason": "length", "error": None}
-            return {"texto": "aria procesa bordes y orientación.\nBUSCAR: primary visual cortex",
+            return {"texto": (
+                        "### Panorama acumulado de la clase\nLa corteza visual primaria "
+                        "procesa información visual.\n\n"
+                        "### Desarrollo detallado del tramo actual\nProcesa bordes y "
+                        "orientación.\n\n"
+                        "### Contexto acumulado para continuar\nLa orientación es una "
+                        "característica visual.\nBUSCAR: primary visual cortex"),
                     "finish_reason": "stop", "error": None}
 
         escriba.preguntar_detalle = fake_truncado
@@ -1794,12 +1801,13 @@ def main() -> int:
             "", "00:00-00:10")
         check("escriba finish_reason length pide continuación una vez",
               res_trunc["estado"] == "generado" and len(llamadas) == 2
+              and "corteza visual primaria" in res_trunc["cuerpo"]
               and "orientación" in res_trunc["cuerpo"],
               f"-> llamadas={llamadas}, res={res_trunc}")
 
         llamadas = []
 
-        def fake_cont_falla(_msgs, max_tokens=0, etiqueta=""):
+        def fake_cont_falla(_msgs, max_tokens=0, etiqueta="", **_kwargs):
             llamadas.append(etiqueta)
             if len(llamadas) == 1:
                 return {"texto": "### Apuntes\n- Potencial de acción incom",
@@ -1817,20 +1825,28 @@ def main() -> int:
               f"-> {res_parcial}")
 
         llamadas = []
+        os.environ["CLASE_ESCRIBA_WEB"] = "1"
 
-        def fake_sin_buscar(_msgs, max_tokens=0, etiqueta=""):
+        def fake_sin_buscar(_msgs, max_tokens=0, etiqueta="", **_kwargs):
             llamadas.append(etiqueta)
             if len(llamadas) == 1:
                 return {"texto": "### Apuntes\nLa sinapsis química libera neurotransmisores.",
                         "finish_reason": "stop", "error": None}
-            return {"texto": "BUSCAR: chemical synapse neurotransmitters",
+            return {"texto": (
+                        "### Panorama acumulado de la clase\nLa sinapsis química "
+                        "transmite señales.\n\n"
+                        "### Desarrollo detallado del tramo actual\nLibera "
+                        "neurotransmisores en la hendidura sináptica.\n\n"
+                        "### Contexto acumulado para continuar\nLos receptores reciben "
+                        "la señal.\nBUSCAR: chemical synapse neurotransmitters"),
                     "finish_reason": "stop", "error": None}
 
         escriba.preguntar_detalle = fake_sin_buscar
         res_buscar = escriba.generar_resumen_en_vivo(
             "La sinapsis química libera neurotransmisores. " * 20, "", "00:00-00:10")
         check("escriba falta BUSCAR se considera incompleto y se corrige",
-              res_buscar["estado"] == "generado" and len(llamadas) == 2,
+              res_buscar["estado"] == "generado" and len(llamadas) == 2
+              and "sinapsis química" in res_buscar["cuerpo"],
               f"-> llamadas={llamadas}, res={res_buscar}")
         dres = estado.crear_clase("Resumen acumulado", curso="curso-test")
         estado.anexar_jsonl(dres / "resumen_tramos.jsonl", {
@@ -1847,6 +1863,10 @@ def main() -> int:
               and "BUSCAR:" not in acum,
               f"-> {acum}")
     finally:
+        if escriba_web_orig is None:
+            os.environ.pop("CLASE_ESCRIBA_WEB", None)
+        else:
+            os.environ["CLASE_ESCRIBA_WEB"] = escriba_web_orig
         escriba._quitar_buscar_y_enriquecer = limpiar_buscar_orig
         escriba.preguntar_detalle = detalle_orig
 

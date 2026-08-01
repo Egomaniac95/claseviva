@@ -15,6 +15,7 @@ from . import audio_sesiones
 from . import config
 from . import costos_api
 from . import estado as est
+from . import escriba
 from . import ocr
 from .deepseek_client import preguntar
 
@@ -60,8 +61,12 @@ def transcript_reciente(d: Path, minutos: int = 45, max_chars: int = 50000) -> s
 
 
 def notas_hoy(d: Path) -> str:
-    p = d / "leccion_en_vivo.md"
-    return p.read_text(encoding="utf-8")[-12000:] if p.is_file() else ""
+    try:
+        parte = int(est.leer_estado(d).get("parte") or 1)
+        return escriba.vista_leccion_vivo_resumen(
+            d, parte=parte, max_chars=12000)
+    except (OSError, TypeError, ValueError):
+        return ""
 
 
 def responder(d: Path, pregunta: str, sistema_extra: str = "", extra_usuario: str = "",

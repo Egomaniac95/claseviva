@@ -295,13 +295,19 @@ def test_cache_llm_esta_activa_por_defecto_y_admite_opt_out(
         monkeypatch, tmp_path):
     calls = []
 
-    def fake_ask(_messages, max_tokens=0, etiqueta=""):
-        calls.append((max_tokens, etiqueta))
+    def fake_ask(_messages, max_tokens=0, etiqueta="", **kwargs):
+        calls.append((max_tokens, etiqueta, kwargs))
         return "respuesta estable"
 
     monkeypatch.setattr(post_procesar, "preguntar", fake_ask)
     monkeypatch.delenv("CLASE_POST_CACHE", raising=False)
     messages = [{"role": "user", "content": "prompt de cache por defecto"}]
+    contenido = "prompt de cache por defecto"
+    cache_dir = tmp_path / "_debug" / "cache_llm"
+    cache_dir.mkdir(parents=True)
+    legacy_key = post_procesar.cache_llm_key("cache-default-v1", contenido)
+    (cache_dir / f"{legacy_key}.md").write_text(
+        "respuesta truncada legacy", encoding="utf-8")
     first = post_procesar.preguntar_cacheado(
         tmp_path, messages, 100, "default-1", "cache-default-v1")
     second = post_procesar.preguntar_cacheado(
@@ -309,6 +315,8 @@ def test_cache_llm_esta_activa_por_defecto_y_admite_opt_out(
 
     assert first == second == "respuesta estable"
     assert len(calls) == 1
+    assert calls[0][2] == {"thinking": False}
+    assert post_procesar.preguntar_cacheado.ultimo_reporte["key"] != legacy_key
 
     monkeypatch.setenv("CLASE_POST_CACHE", "0")
     uncached_messages = [{"role": "user", "content": "prompt sin cache"}]
@@ -317,6 +325,30 @@ def test_cache_llm_esta_activa_por_defecto_y_admite_opt_out(
     post_procesar.preguntar_cacheado(
         tmp_path, uncached_messages, 100, "off-2", "cache-off-v1")
     assert len(calls) == 3
+    assert all(call[2] == {"thinking": False} for call in calls)
+
+
+def test_post_desactiva_thinking_en_tareas_y_version_inglesa(
+        monkeypatch, tmp_path):
+    llamadas = []
+
+    def fake_ask(_messages, max_tokens=0, etiqueta="", **kwargs):
+        llamadas.append((etiqueta, max_tokens, kwargs))
+        if etiqueta == "post-tareas":
+            return "SIN_TAREAS"
+        return "## English section\n\nVisible output."
+
+    monkeypatch.setattr(post_procesar, "preguntar", fake_ask)
+    tmp_path.mkdir(exist_ok=True)
+
+    assert post_procesar.extraer_tareas(
+        tmp_path, "Contenido sin tareas", "CLASE_01") is None
+    destino = post_procesar.generar_leccion_ingles(
+        tmp_path, "# Lección\n\nContenido.", {"nombre": "Clase"})
+
+    assert destino.is_file()
+    assert [fila[0] for fila in llamadas] == ["post-tareas", "post-eng-1"]
+    assert all(fila[2] == {"thinking": False} for fila in llamadas)
 
 
 def test_continuacion_integra_cuerpo_previo_completo_localmente():

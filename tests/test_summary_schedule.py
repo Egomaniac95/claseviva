@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from src import audio_manifest, escriba, estado, post_procesar
+from src import audio_manifest, copiloto, escriba, estado, post_procesar
 
 
 class _DetenerCiclo(RuntimeError):
@@ -106,6 +106,28 @@ def test_plan_auto_no_dispara_en_pausa_y_reinicio_avanza_una_frontera():
     assert doble_poll["due"] is False
 
 
+def test_ancla_parcial_conserva_grilla_cinco_diez_y_ventana_acumulada():
+    st = {
+        "inicio": 1000.0, "estado": "grabando", "auto_pausa": False,
+        "resumen_clock": "captura_util",
+    }
+    marcas = [{"t": 1000.0, "tipo": "inicio"}]
+    cinco = escriba.planificar_auto_captura_util(
+        st, marcas, ultimo_auto_t=1000.0, ahora=1345.0, intervalo=300.0)
+    diez = escriba.planificar_auto_captura_util(
+        st, marcas, ultimo_auto_t=cinco["boundary_wall_t"],
+        ahora=1645.0, intervalo=300.0)
+
+    assert cinco["boundary_recorded_sec"] == 300.0
+    assert cinco["boundary_wall_t"] == 1300.0
+    assert diez["boundary_recorded_sec"] == 600.0
+    assert diez["boundary_wall_t"] == 1600.0
+    # El ancla agenda 10:00, pero el cursor de contenido no se movió: la próxima
+    # ventana del loop sigue empezando en 00:00 y recupera ambos tramos.
+    ultimo_cursor_contenido = 1000.0
+    assert (ultimo_cursor_contenido, diez["boundary_wall_t"]) == (1000.0, 1600.0)
+
+
 def test_main_auto_espera_diez_minutos_utiles_tras_reanudar(
         monkeypatch, tmp_path):
     d = tmp_path / "clase-util"
@@ -183,7 +205,7 @@ def test_manual_exitoso_no_mueve_grilla_auto_y_no_duplica_contenido(
     ]
     reloj = json.loads((d / "escriba_estado.json").read_text(encoding="utf-8"))
     assert reloj == {
-        "schema_version": 5,
+        "schema_version": escriba.ESTADO_ESCRIBA_SCHEMA_VERSION,
         "ultimo_t": 1555.0,
         "ultimo_auto_t": 1555.0,
         "ultimo_manual_t": 1255.0,
@@ -267,7 +289,7 @@ def test_manual_no_reancla_frontera_cinco_minutos_y_no_deja_hueco(
          "forzar": False, "disparo": "auto"},
     ]
     reloj = json.loads((d / "escriba_estado.json").read_text(encoding="utf-8"))
-    assert reloj["schema_version"] == 5
+    assert reloj["schema_version"] == escriba.ESTADO_ESCRIBA_SCHEMA_VERSION
     assert reloj["auto_anchor_t"] == 1600.0
     assert reloj["ultimo_auto_t"] == 1600.0
     assert reloj["ultimo_manual_t"] == 1135.0
@@ -301,6 +323,60 @@ def test_reinicio_ignora_reanclaje_manual_legacy_y_recupera_grilla_fija(
 
     assert siguiente == 1300.0
     assert anchor == 1000.0
+
+
+def test_reinicio_wall_clock_respeta_siguiente_frontera_tras_parcial(tmp_path):
+    d = tmp_path / "clase-reinicio-parcial-wall"
+    d.mkdir()
+    path = d / "escriba_estado.json"
+    path.write_text(json.dumps({
+        "schema_version": escriba.ESTADO_ESCRIBA_SCHEMA_VERSION,
+        "ultimo_auto_t": 1000.0,
+        "ultimo_manual_t": 1000.0,
+        "ultimo_final_t": 1000.0,
+        "proximo_auto_t": 2200.0,
+        "auto_anchor_t": 1555.0,
+    }), encoding="utf-8")
+
+    ultimo_auto, _manual, _final, siguiente = escriba._cargar_estado_escriba(
+        path, inicio=1000.0, intervalo=600.0)
+
+    assert ultimo_auto == 1000.0
+    assert siguiente == 2200.0
+    assert escriba._cargar_auto_anchor(path, 1000.0, ultimo_auto) == 1555.0
+
+
+def test_migra_schema_cinco_desde_semilla_util_y_no_desde_parcial_vacio(
+        tmp_path):
+    d = tmp_path / "clase-migracion-parciales"
+    d.mkdir()
+    path = d / "escriba_estado.json"
+    path.write_text(json.dumps({
+        "schema_version": 5,
+        "ultimo_auto_t": 1600.0,
+        "ultimo_manual_t": 1000.0,
+        "ultimo_final_t": 1000.0,
+        "proximo_auto_t": 1945.0,
+        "auto_anchor_t": 1600.0,
+    }), encoding="utf-8")
+    estado.anexar_jsonl(d / "resumen_tramos.jsonl", {
+        "disparo": "auto", "estado": "parcial", "parte": 1,
+        "t_ini": 1000.0, "t_fin": 1300.0, "auto_deadline_t": 1345.0,
+        "estado_pedagogico": "### Panorama acumulado de la clase\nSEMILLA_UTIL",
+    })
+    estado.anexar_jsonl(d / "resumen_tramos.jsonl", {
+        "disparo": "auto", "estado": "parcial", "parte": 1,
+        "t_ini": 1300.0, "t_fin": 1600.0, "auto_deadline_t": 1645.0,
+        "estado_pedagogico": "", "motivos": ["api_sin_respuesta"],
+    })
+
+    ultimo_auto, manual, final, siguiente = escriba._cargar_estado_escriba(
+        path, inicio=1000.0, intervalo=300.0)
+    anchor = escriba._cargar_auto_anchor(path, 1000.0, ultimo_auto)
+
+    assert (ultimo_auto, manual, final) == (1300.0, 1000.0, 1000.0)
+    assert anchor == 1600.0
+    assert siguiente == 1945.0
 
 
 def test_ocho_horas_mantienen_estado_compacto_y_preservan_tramo_nuevo(
@@ -368,6 +444,244 @@ def test_ocho_horas_mantienen_estado_compacto_y_preservan_tramo_nuevo(
     assert "Contexto acumulado para continuar" in result["estado_pedagogico"]
 
 
+def test_web_off_acepta_ficha_completa_sin_buscar_en_una_llamada(monkeypatch):
+    llamadas = []
+
+    def fake_detalle(messages, **kwargs):
+        llamadas.append((messages, kwargs))
+        return {
+            "texto": (
+                "### Panorama acumulado de la clase\nEl modelo aprende de ejemplos.\n\n"
+                "### Desarrollo detallado del tramo actual\nSe comparan predicción y "
+                "etiqueta para ajustar los pesos.\n\n"
+                "### Contexto acumulado para continuar\nEl error guía la actualización."
+            ),
+            "finish_reason": "stop", "error": None,
+        }
+
+    monkeypatch.setenv("CLASE_ESCRIBA_WEB", "0")
+    monkeypatch.setattr(escriba, "preguntar_detalle", fake_detalle)
+
+    resultado = escriba.generar_resumen_en_vivo(
+        "El modelo compara su predicción con la etiqueta y ajusta los pesos.",
+        "", "00:00:00–00:05:00")
+
+    assert resultado["estado"] == "generado"
+    assert len(llamadas) == 1
+    assert llamadas[0][1]["thinking"] is False
+    assert "AL FINAL" not in llamadas[0][0][0]["content"]
+
+
+def test_gate_rechaza_prosa_larga_sin_secciones_nucleo(monkeypatch):
+    monkeypatch.setenv("CLASE_ESCRIBA_WEB", "0")
+    transcript = "Evidencia docente con conceptos y ejemplos. " * 30
+    prosa_plana = "Texto coherente de salida. " * 40
+    estructurada = (
+        "### Panorama acumulado de la clase\nPanorama integrado.\n\n"
+        "### Desarrollo detallado del tramo actual\nDesarrollo suficiente.\n\n"
+        "### Contexto acumulado para continuar\nContexto útil."
+    )
+
+    motivos_planos = escriba.motivos_respuesta_incompleta(
+        prosa_plana, "stop", transcript, "")
+    motivos_estructurados = escriba.motivos_respuesta_incompleta(
+        estructurada, "stop", transcript, "")
+
+    assert any(m.startswith("faltan_secciones_nucleo=") for m in motivos_planos)
+    assert not any(
+        m.startswith("faltan_secciones_nucleo=") for m in motivos_estructurados)
+
+
+def test_gate_rechaza_transcript_volcado_dentro_de_secciones(monkeypatch):
+    monkeypatch.setenv("CLASE_ESCRIBA_WEB", "0")
+    transcript = " ".join(f"concepto{i}" for i in range(180))
+    volcado = (
+        "### Panorama acumulado de la clase\nPanorama nominal.\n\n"
+        "### Desarrollo detallado del tramo actual\n" + transcript + "\n\n"
+        "### Contexto acumulado para continuar\nContexto nominal."
+    )
+    didactico = (
+        "### Panorama acumulado de la clase\nSe presentó una progresión conceptual.\n\n"
+        "### Desarrollo detallado del tramo actual\nLos conceptos se relacionaron "
+        "mediante ejemplos y contrastes, no como una transcripción literal.\n\n"
+        "### Contexto acumulado para continuar\nLa idea central debe conectarse "
+        "con el siguiente procedimiento."
+    )
+
+    assert "copia_excesiva_transcript" in escriba.motivos_respuesta_incompleta(
+        volcado, "stop", transcript, "")
+    assert "copia_excesiva_transcript" not in escriba.motivos_respuesta_incompleta(
+        didactico, "stop", transcript, "")
+
+
+def test_gate_rechaza_encabezados_nucleo_sin_desarrollo(monkeypatch):
+    monkeypatch.setenv("CLASE_ESCRIBA_WEB", "0")
+    transcript = "La evidencia explica un concepto mediante ejemplos y contrastes. " * 4
+    vacio = (
+        "### Panorama acumulado de la clase\n\n"
+        "### Desarrollo detallado del tramo actual\n-\n\n"
+        "### Contexto acumulado para continuar\n"
+    )
+
+    motivos = escriba.motivos_respuesta_incompleta(
+        vacio, "stop", transcript, "")
+
+    assert any(m.startswith("faltan_secciones_nucleo=") for m in motivos)
+
+
+def test_reintento_de_escriba_es_unico_compacto_y_sin_thinking(monkeypatch):
+    llamadas = []
+
+    def fake_detalle(messages, **kwargs):
+        llamadas.append((messages, kwargs))
+        if len(llamadas) == 1:
+            return {
+                "texto": "### Panorama acumulado de la clase\nBorrador incom",
+                "finish_reason": "length", "error": None,
+            }
+        return {
+            "texto": (
+                "### Panorama acumulado de la clase\nPanorama completo.\n\n"
+                "### Desarrollo detallado del tramo actual\n"
+                + ("La evidencia explica el mecanismo y conecta cada paso. " * 38)
+                + "\n\n"
+                "### Contexto acumulado para continuar\n"
+                "SENTINEL_CONTEXTO_PREVIO permanece conectado."
+            ),
+            "finish_reason": "stop", "error": None,
+        }
+
+    monkeypatch.setenv("CLASE_ESCRIBA_WEB", "0")
+    monkeypatch.setattr(escriba, "preguntar_detalle", fake_detalle)
+    transcript = "SENTINEL_NUEVO " + ("evidencia técnica extensa " * 900)
+
+    resultado = escriba.generar_resumen_en_vivo(
+        transcript, "OCR_IMPORTANTE " * 200, "00:00:00–00:05:00",
+        "### Panorama acumulado de la clase\nSENTINEL_CONTEXTO_PREVIO")
+
+    assert resultado["estado"] == "generado"
+    assert len(llamadas) == 2
+    assert [call[1]["thinking"] for call in llamadas] == [False, False]
+    assert llamadas[1][1]["etiqueta"] == "escriba-reintento-compacto"
+    assert llamadas[1][1]["max_tokens"] == 1800
+    assert len(llamadas[1][0][-1]["content"]) <= 9800
+    assert len(llamadas[1][0][-1]["content"]) < len(llamadas[0][0][-1]["content"])
+    assert "SENTINEL_CONTEXTO_PREVIO" in llamadas[1][0][-1]["content"]
+    assert "SENTINEL_CONTEXTO_PREVIO" in resultado["cuerpo"]
+    assert "Transcripción cruda preservada" not in resultado["cuerpo"]
+
+
+def test_respuesta_vacia_tiene_un_solo_rescate_compacto(monkeypatch):
+    llamadas = []
+
+    def fake_detalle(_messages, **kwargs):
+        llamadas.append(kwargs)
+        if len(llamadas) == 1:
+            return {"texto": None, "finish_reason": "length", "error": None}
+        return {
+            "texto": (
+                "### Panorama acumulado de la clase\nBase recuperada.\n\n"
+                "### Desarrollo detallado del tramo actual\nConcepto recuperado.\n\n"
+                "### Contexto acumulado para continuar\nContexto recuperado."
+            ),
+            "finish_reason": "stop", "error": None,
+        }
+
+    monkeypatch.setenv("CLASE_ESCRIBA_WEB", "0")
+    monkeypatch.setattr(escriba, "preguntar_detalle", fake_detalle)
+
+    resultado = escriba.generar_resumen_en_vivo(
+        "La evidencia explica un concepto nuevo con un ejemplo concreto.",
+        "", "00:00:00–00:05:00")
+
+    assert resultado["estado"] == "generado"
+    assert len(llamadas) == 2
+    assert llamadas[1]["etiqueta"] == "escriba-reintento-compacto"
+    assert all(llamada["thinking"] is False for llamada in llamadas)
+
+
+def test_resumen_parcial_no_publica_journal_ni_markdown(monkeypatch, tmp_path):
+    d = tmp_path / "clase-parcial"
+    d.mkdir()
+    estado.anexar_jsonl(d / "transcript.jsonl", {
+        "t": 1005.0, "parte": 1,
+        "texto": "Contenido técnico durable para una ficha pedagógica. " * 5,
+    })
+    monkeypatch.setattr(escriba, "generar_resumen_en_vivo", lambda *_a, **_k: {
+        "estado": "parcial",
+        "msg": "Resumen parcial; transcript conservado",
+        "cuerpo": "### Resumen parcial\nBorrador incompleto.",
+        "motivos": ["finish_reason=length"],
+        "estado_pedagogico": "",
+    })
+
+    assert escriba.procesar_bloque(
+        d, 1000.0, 1010.0, 1, disparo="auto") is False
+    assert not (d / "resumen_tramos.jsonl").exists()
+    assert not (d / "leccion_en_vivo.md").exists()
+    assert escriba.procesar_bloque.ultimo_estado["estado"] == "parcial"
+
+
+def test_auto_parcial_avanza_solo_ancla_y_no_cursor(monkeypatch, tmp_path):
+    d = tmp_path / "clase-auto-parcial"
+    _crear_sesion(d)
+    clock = {"now": 1645.0}
+    _parchar_main(monkeypatch, d, clock)
+    llamadas = []
+
+    def fake_parcial(_d, desde, hasta, parte, forzar=False, disparo=None):
+        llamadas.append((desde, hasta, parte, forzar, disparo))
+        return False
+
+    fake_parcial.ultimo_estado = {
+        "estado": "parcial", "msg": "pendiente",
+        "motivos": ["respuesta_vacia"],
+    }
+    monkeypatch.setattr(escriba, "procesar_bloque", fake_parcial)
+    monkeypatch.setattr(
+        escriba.time, "sleep", lambda _s: (_ for _ in ()).throw(_DetenerCiclo()))
+
+    with pytest.raises(_DetenerCiclo):
+        escriba.main()
+
+    reloj = json.loads((d / "escriba_estado.json").read_text(encoding="utf-8"))
+    assert llamadas == [(1000.0, 1555.0, 1, False, "auto")]
+    assert reloj["ultimo_auto_t"] == 1000.0
+    assert reloj["ultimo_manual_t"] == 1000.0
+    assert reloj["auto_anchor_t"] == 1555.0
+    assert escriba._cargar_auto_anchor(
+        d / "escriba_estado.json", 1000.0, 1000.0) == 1555.0
+    assert estado.leer_estado(d)["resumen_estado"] == "parcial"
+
+
+def test_manual_parcial_consume_pulsacion_pero_no_contenido(monkeypatch, tmp_path):
+    d = tmp_path / "clase-manual-parcial"
+    _crear_sesion(d, resumir=True)
+    clock = {"now": 1300.0}
+    _parchar_main(monkeypatch, d, clock)
+
+    def fake_parcial(*_args, **_kwargs):
+        return False
+
+    fake_parcial.ultimo_estado = {
+        "estado": "parcial", "msg": "pendiente",
+        "motivos": ["respuesta_vacia"],
+    }
+    monkeypatch.setattr(escriba, "procesar_bloque", fake_parcial)
+    monkeypatch.setattr(
+        escriba.time, "sleep", lambda _s: (_ for _ in ()).throw(_DetenerCiclo()))
+
+    with pytest.raises(_DetenerCiclo):
+        escriba.main()
+
+    reloj = json.loads((d / "escriba_estado.json").read_text(encoding="utf-8"))
+    st = estado.leer_estado(d)
+    assert reloj["ultimo_auto_t"] == 1000.0
+    assert reloj["ultimo_manual_t"] == 1000.0
+    assert st["resumir"] is False
+    assert st["resumen_estado"] == "parcial"
+
+
 def test_rango_de_resumen_usa_tiempo_relativo_de_captura_util(tmp_path):
     d = tmp_path / "clase-rango"
     _crear_sesion(d)
@@ -416,6 +730,93 @@ def test_vista_viva_muestra_una_ficha_actual_sin_repetir_panorama_ni_stt_crudo(
     assert "## ⏳ Tramo en curso" in vista
     assert "PENDIENTE_NO_PUBLICAR" not in vista
     assert "00:00:00" not in vista
+
+
+def test_vista_conserva_ficha_valida_ante_parcial_posterior(tmp_path):
+    d = tmp_path / "clase-vista-parcial"
+    _crear_sesion(d)
+    estado.anexar_jsonl(d / "resumen_tramos.jsonl", {
+        "parte": 1, "t_fin": 1300.0, "rango": "00:00:00–00:05:00",
+        "estado": "generado",
+        "cuerpo": (
+            "### Panorama acumulado de la clase\nFICHA_ESTABLE.\n\n"
+            "### Desarrollo detallado del tramo actual\nContenido válido."
+        ),
+    })
+    estado.anexar_jsonl(d / "resumen_tramos.jsonl", {
+        "parte": 1, "t_fin": 1600.0, "rango": "00:05:00–00:10:00",
+        "estado": "parcial",
+        "cuerpo": (
+            "### Resumen parcial del tramo\nPARCIAL_NO_PUBLICAR.\n\n"
+            "### Transcripción cruda preservada\n> STT_CRUDO_NO_PUBLICAR"
+        ),
+    })
+
+    vista = escriba.vista_leccion_vivo_resumen(d, parte=1)
+
+    assert "FICHA_ESTABLE" in vista
+    assert "PARCIAL_NO_PUBLICAR" not in vista
+    assert "STT_CRUDO_NO_PUBLICAR" not in vista
+    assert "Resumen pendiente" in vista
+
+
+def test_cierre_corto_crudo_no_reemplaza_ficha_pedagogica(tmp_path):
+    d = tmp_path / "clase-vista-cierre-corto"
+    _crear_sesion(d)
+    estado.anexar_jsonl(d / "resumen_tramos.jsonl", {
+        "parte": 1, "t_fin": 1300.0, "rango": "00:00:00–00:05:00",
+        "estado": "generado", "motivos": [],
+        "cuerpo": (
+            "### Panorama acumulado de la clase\nFICHA_PEDAGOGICA_ESTABLE.\n\n"
+            "### Desarrollo detallado del tramo actual\nDesarrollo válido.\n\n"
+            "### Contexto acumulado para continuar\nContexto válido."
+        ),
+    })
+    estado.anexar_jsonl(d / "resumen_tramos.jsonl", {
+        "parte": 1, "t_fin": 1320.0, "rango": "00:05:00–00:05:20",
+        "estado": "generado", "motivos": ["cierre_corto_preservado"],
+        "cuerpo": "### Transcripción cruda preservada\n> FRASE_CRUDA_FINAL",
+    })
+
+    vista = escriba.vista_leccion_vivo_resumen(d, parte=1)
+
+    assert "FICHA_PEDAGOGICA_ESTABLE" in vista
+    assert "FRASE_CRUDA_FINAL" not in vista
+    assert "Resumen pendiente" in vista
+
+
+def test_solo_parciales_rescata_estado_pedagogico_sin_publicar_raw(tmp_path):
+    d = tmp_path / "clase-vista-solo-parciales"
+    _crear_sesion(d)
+    estado.anexar_jsonl(d / "resumen_tramos.jsonl", {
+        "parte": 1, "t_fin": 1300.0, "rango": "00:00:00–00:05:00",
+        "estado": "parcial",
+        "estado_pedagogico": (
+            "### Panorama acumulado de la clase\nSEMILLA_PEDAGOGICA.\n\n"
+            "### Contexto acumulado para continuar\nBASE_PARA_CONTINUAR."
+        ),
+        "cuerpo": "### Resumen parcial\nBODY_PARCIAL_NO_PUBLICAR.",
+    })
+    estado.anexar_jsonl(d / "resumen_tramos.jsonl", {
+        "parte": 1, "t_fin": 1600.0, "rango": "00:05:00–00:10:00",
+        "estado": "parcial", "estado_pedagogico": "",
+        "cuerpo": (
+            "### Resumen parcial\nULTIMO_VACIO_NO_PUBLICAR.\n\n"
+            "### Transcripción cruda preservada\n> STT_CRUDO_NO_PUBLICAR"
+        ),
+    })
+
+    vista = escriba.vista_leccion_vivo_resumen(d, parte=1)
+    contexto = escriba.resumenes_acumulados_md(d, parte=1)
+
+    assert "SEMILLA_PEDAGOGICA" in vista
+    assert "BASE_PARA_CONTINUAR" in vista
+    assert "Resumen pedagógico pendiente" in vista
+    assert "BODY_PARCIAL_NO_PUBLICAR" not in vista
+    assert "ULTIMO_VACIO_NO_PUBLICAR" not in vista
+    assert "STT_CRUDO_NO_PUBLICAR" not in vista
+    assert "SEMILLA_PEDAGOGICA" in contexto
+    assert "ULTIMO_VACIO_NO_PUBLICAR" not in contexto
 
 
 def test_auto_dispara_en_diez_no_en_diez_cuarenta_y_cinco(monkeypatch, tmp_path):
@@ -477,7 +878,7 @@ def test_auto_fallido_no_avanza_ningun_cursor(
     assert llamadas == [(1000.0, 1555.0, 1, False, "auto")]
     reloj = json.loads((d / "escriba_estado.json").read_text(encoding="utf-8"))
     assert reloj == {
-        "schema_version": 5,
+        "schema_version": escriba.ESTADO_ESCRIBA_SCHEMA_VERSION,
         "ultimo_t": 1000.0,
         "ultimo_auto_t": 1000.0,
         "ultimo_manual_t": 1000.0,
@@ -547,7 +948,7 @@ def test_estado_legacy_separa_manual_sin_saltar_contenido_auto(tmp_path):
     assert (ultimo_auto, ultimo_manual, ultimo_final, proximo) == (
         1000.0, 1255.0, 1000.0, 1600.0)
     assert json.loads(path.read_text(encoding="utf-8")) == {
-        "schema_version": 5,
+        "schema_version": escriba.ESTADO_ESCRIBA_SCHEMA_VERSION,
         "ultimo_t": 1000.0,
         "ultimo_auto_t": 1000.0,
         "ultimo_manual_t": 1255.0,
@@ -711,6 +1112,146 @@ def test_reinicio_repara_append_markdown_parcial_sin_duplicar(tmp_path):
     assert leccion.count(f"<!-- resumen-fin:{resumen_id} -->") == 1
 
 
+def test_reinicio_no_republica_parcial_ni_transcript_crudo(tmp_path):
+    d = tmp_path / "clase"
+    d.mkdir()
+    estado.anexar_jsonl(d / "resumen_tramos.jsonl", {
+        "resumen_id": "auto:p1:1000.000000:1300.000000",
+        "t_ini": 1000.0,
+        "t_fin": 1300.0,
+        "rango": "00:00–00:05",
+        "parte": 1,
+        "disparo": "auto",
+        "estado": "generado",
+        "imagenes": [],
+        "links_extra": [],
+        "cuerpo": "### Panorama acumulado de la clase\nFicha didáctica válida.",
+    })
+    estado.anexar_jsonl(d / "resumen_tramos.jsonl", {
+        "resumen_id": "auto:p1:1300.000000:1600.000000",
+        "t_ini": 1300.0,
+        "t_fin": 1600.0,
+        "rango": "00:05–00:10",
+        "parte": 1,
+        "disparo": "auto",
+        "estado": "parcial",
+        "imagenes": [],
+        "links_extra": [],
+        "cuerpo": (
+            "## Resumen parcial\nNo publicable.\n\n"
+            "### Transcripción cruda preservada\nVOLCADO_LITERAL_SENTINEL"
+        ),
+    })
+
+    escriba._reparar_bloques_confirmados(d)
+
+    leccion = (d / "leccion_en_vivo.md").read_text(encoding="utf-8")
+    assert "Ficha didáctica válida." in leccion
+    assert "VOLCADO_LITERAL_SENTINEL" not in leccion
+    assert "Resumen parcial" not in leccion
+
+
+def test_parcial_historico_no_confirma_ventana_ni_bloquea_reintento(tmp_path):
+    d = tmp_path / "clase"
+    d.mkdir()
+    parcial = {
+        "resumen_id": "auto:p1:1000.000000:1300.000000",
+        "t_ini": 1000.0,
+        "t_fin": 1300.0,
+        "rango": "00:00–00:05",
+        "parte": 1,
+        "disparo": "auto",
+        "estado": "parcial",
+        "cuerpo": "### Transcripción cruda preservada\nTexto sin transformar.",
+    }
+    estado.anexar_jsonl(d / "resumen_tramos.jsonl", parcial)
+
+    assert escriba._resumen_confirmado(
+        d, "auto", 1, 1000.0, 1300.0) is None
+
+    generado = {
+        **parcial,
+        "estado": "generado",
+        "cuerpo": "### Panorama acumulado de la clase\nFicha recuperada.",
+    }
+    estado.anexar_jsonl(d / "resumen_tramos.jsonl", generado)
+    confirmado = escriba._resumen_confirmado(
+        d, "auto", 1, 1000.0, 1300.0)
+
+    assert confirmado is not None
+    assert confirmado["estado"] == "generado"
+    assert "Ficha recuperada." in (d / "leccion_en_vivo.md").read_text(
+        encoding="utf-8")
+
+
+def test_post_y_copiloto_ignoran_parcial_crudo_y_usan_ficha_publicable(tmp_path):
+    d = tmp_path / "clase"
+    _crear_sesion(d)
+    generado = {
+        "resumen_id": "auto:p1:1000.000000:1300.000000",
+        "t_ini": 1000.0,
+        "t_fin": 1300.0,
+        "rango": "00:00–00:05",
+        "parte": 1,
+        "disparo": "auto",
+        "estado": "generado",
+        "imagenes": ["principal.jpg"],
+        "cuerpo": (
+            "### Panorama acumulado de la clase\nPanorama pedagógico limpio.\n\n"
+            "### Desarrollo detallado del tramo actual\nExplicación con relaciones.\n\n"
+            "### Contexto acumulado para continuar\nBase para el siguiente concepto."
+        ),
+    }
+    parcial = {
+        "resumen_id": "auto:p1:1300.000000:1600.000000",
+        "t_ini": 1300.0,
+        "t_fin": 1600.0,
+        "rango": "00:05–00:10",
+        "parte": 1,
+        "disparo": "auto",
+        "estado": "parcial",
+        "estado_pedagogico": "### Contexto acumulado para continuar\nSemilla limpia.",
+        "cuerpo": (
+            "## Resumen parcial\nPARCIAL_SENTINEL\n\n"
+            "### Transcripción cruda preservada\nVOLCADO_LITERAL_SENTINEL"
+        ),
+    }
+    estado.anexar_jsonl(d / "resumen_tramos.jsonl", generado)
+    estado.anexar_jsonl(d / "resumen_tramos.jsonl", parcial)
+    (d / "leccion_en_vivo.md").write_text(
+        parcial["cuerpo"], encoding="utf-8")
+
+    contexto_post = post_procesar.resumenes_tramos_rango(
+        d, 0.0, 600.0, {"origen": "vivo", "inicio": 1000.0})
+    contexto_copiloto = copiloto.notas_hoy(d)
+
+    for contexto in (contexto_post, contexto_copiloto):
+        assert "Panorama pedagógico limpio." in contexto
+        assert "PARCIAL_SENTINEL" not in contexto
+        assert "VOLCADO_LITERAL_SENTINEL" not in contexto
+
+
+def test_post_usa_solo_semilla_limpia_si_no_hay_ficha_publicable(tmp_path):
+    d = tmp_path / "clase"
+    d.mkdir()
+    estado.anexar_jsonl(d / "resumen_tramos.jsonl", {
+        "t_ini": 1000.0,
+        "t_fin": 1300.0,
+        "rango": "00:00–00:05",
+        "parte": 1,
+        "estado": "parcial",
+        "estado_pedagogico": "### Contexto acumulado para continuar\nSEMILLA_LIMPIA",
+        "cuerpo": "### Transcripción cruda preservada\nVOLCADO_LITERAL_SENTINEL",
+    })
+
+    contexto = post_procesar.resumenes_tramos_rango(
+        d, 0.0, 300.0, {"origen": "vivo", "inicio": 1000.0})
+
+    assert "SEMILLA_LIMPIA" in contexto
+    assert "estado=semilla_pedagogica" in contexto
+    assert "VOLCADO_LITERAL_SENTINEL" not in contexto
+
+
 def test_fin_inicia_en_cursor_mas_avanzado_y_preserva_cursores_separados(
         monkeypatch, tmp_path):
     d = tmp_path / "clase"
@@ -860,7 +1401,7 @@ def test_fin_con_timeout_declara_pendiente_y_no_avanza_cursores(
     st_final = estado.leer_estado(d)
     assert reloj == {
         **estado_previo,
-        "schema_version": 5,
+        "schema_version": escriba.ESTADO_ESCRIBA_SCHEMA_VERSION,
         "auto_anchor_t": 1000.0,
     }
     assert st_final["resumen_estado"] == "pendiente"
