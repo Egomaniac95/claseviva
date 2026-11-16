@@ -611,7 +611,7 @@ def main() -> int:
               < final3.index("Resumen ejecutivo"))
         check("consolidacion de app deja paquete ligero reanudable",
               sorted(path.name for path in d3.iterdir())
-              == ["img", "leccion_final.md"]
+              == ["img", "leccion_final.html", "leccion_final.md"]
               and study_package.parse_metadata(final3) is not None,
               f"-> {sorted(path.name for path in d3.iterdir())}")
         check("leccion final conserva transcript de cada parte",

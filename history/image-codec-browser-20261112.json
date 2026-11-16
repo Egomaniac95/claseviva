@@ -1,0 +1,32 @@
+{
+  "browser": "Microsoft Edge",
+  "local_file_test": true,
+  "results": [
+    {
+      "format": "jpg",
+      "supported": true,
+      "width": 32
+    },
+    {
+      "format": "png",
+      "supported": true,
+      "width": 32
+    },
+    {
+      "format": "webp",
+      "supported": true,
+      "width": 32
+    },
+    {
+      "format": "avif",
+      "supported": true,
+      "width": 32
+    },
+    {
+      "format": "jxl",
+      "supported": false
+    }
+  ],
+  "exit_code": 0,
+  "version": "157.0.4341.46"
+}

@@ -49,7 +49,12 @@ def cargar_wav16k(ruta) -> np.ndarray:
         raise ValueError(f"se esperaba PCM int16, sampwidth={ancho}")
     datos = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
     if canales > 1:
-        datos = datos.reshape(-1, canales).mean(axis=1)
+        canales_pcm = datos.reshape(-1, canales)
+        datos = canales_pcm.mean(axis=1)
+        if not np.any(datos) and np.any(canales_pcm):
+            # Canales en contrafase pueden cancelar toda la voz al promediar.
+            energia = np.mean(np.square(canales_pcm, dtype=np.float64), axis=0)
+            datos = canales_pcm[:, int(np.argmax(energia))]
     if rate != 16000:
         n_out = int(len(datos) * 16000 / rate)
         datos = np.interp(np.linspace(0, len(datos), n_out, endpoint=False),

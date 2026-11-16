@@ -1,0 +1,34 @@
+﻿{
+    "kind":  "generated_test_and_python_cache",
+    "paths":  [
+                  {
+                      "path":  "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\.qa-tmp-audit",
+                      "bytes":  86082
+                  },
+                  {
+                      "path":  "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\.qa-tmp-audit-final",
+                      "bytes":  294225
+                  },
+                  {
+                      "path":  "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\.qa-tmp-audit-final-2",
+                      "bytes":  294353
+                  },
+                  {
+                      "path":  "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\.qa-tmp-efficiency",
+                      "bytes":  100282
+                  },
+                  {
+                      "path":  "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\src\\__pycache__",
+                      "bytes":  3935058
+                  },
+                  {
+                      "path":  "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\tests\\__pycache__",
+                      "bytes":  1422285
+                  },
+                  {
+                      "path":  "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\scripts\\__pycache__",
+                      "bytes":  50757
+                  }
+              ],
+    "bytes_removed":  6183042
+}

@@ -1,4 +1,4 @@
-"""Loopback WASAPI filtrado por proceso (Chrome/Edge).
+"""Loopback WASAPI filtrado por proceso y sus hijos (cualquier aplicación).
 
 Windows 10 build 20348+ expone VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK: permite
 capturar solo el audio renderizado por un proceso y sus hijos. Este modulo lo
@@ -542,11 +542,13 @@ class CapturadorProceso:
                            else string_at(data, nbytes))
                 self._anexar_paquete(
                     paquete, nframes, int(devpos), qpc_position=int(qpc))
-                if inspector and paquete:
-                    inspector(paquete, self.rate, self.canales)
                 drenados += nframes
             finally:
                 self._capture.ReleaseBuffer(nframes)
+            # El inspector puede consultar sesiones COM. Liberar primero el
+            # paquete evita retener el buffer de WASAPI durante esa consulta.
+            if inspector and paquete:
+                inspector(paquete, self.rate, self.canales)
 
     def _rellenar_timeout(self, faltan_frames: int) -> None:
         """Rellena una ausencia y adelanta el reloj del dispositivo conocido."""

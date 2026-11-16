@@ -1,6 +1,32 @@
 from src import panel
 
 
+def test_paquete_oculta_solo_metadata_en_visor_y_conserva_markdown(monkeypatch, tmp_path):
+    original = ('<!-- CLASEVIVA_STUDY_PACKAGE_V1 {"fixture":true} -->\n\n'
+                '# Clase completa\n\n![Figura](img/a.png)\n\n## Cierre completo\n')
+    lesson = tmp_path / "leccion_final.md"
+    lesson.write_text(original, encoding="utf-8")
+    original_bytes = lesson.read_bytes()
+    monkeypatch.setattr(panel, "_clase", lambda: tmp_path)
+    client = panel.app.test_client()
+    rendered = client.get("/leccion_final").get_data(as_text=True)
+    assert "CLASEVIVA_STUDY_PACKAGE_V1" not in rendered
+    assert '<h1>Clase completa</h1>' in rendered
+    assert 'src="/img/a.png"' in rendered
+    assert '<h2>Cierre completo</h2>' in rendered
+    assert client.get('/leccion_final.md').data == original_bytes
+    assert lesson.read_bytes() == original_bytes
+    assert lesson.read_text(encoding="utf-8") == original
+
+
+def test_imagen_markdown_relativa_no_amplia_acceso_a_archivos():
+    assert panel._safe_img_src('img/a.png') == '/img/a.png'
+    assert panel._safe_img_src('./img/a.png') == '/img/a.png'
+    for unsafe in ('img/../.env', '../img/a.png', 'img/a.png?x=1',
+                   'file:///C:/secreto', 'img/%2e%2e/.env'):
+        assert panel._safe_img_src(unsafe) == ''
+
+
 def test_markdown_renderiza_imagen_local_y_bloquea_traversal_y_script():
     rendered = panel.a_html(
         '| Evidencia | Explicación |\n'

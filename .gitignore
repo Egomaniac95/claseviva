@@ -27,3 +27,21 @@ __pycache__/
 # Artefactos locales y herramientas retiradas
 claude-worktree-respaldo.patch
 *.patch
+dist/
+build/
+*.spec.bak
+.venv-qa/
+.runtime/
+.qa-tmp-*/
+
+# --- Añadido para publicación (2026-11-16) ---
+# Cualquier variante de entorno, salvo la plantilla
+.env.*
+!.env.example
+# Artefactos de distribución y descargas
+*.zip
+*.tgz
+*.tar.gz
+ClaseViva-Portable*/
+# Salidas locales de scripts
+*.log

@@ -1,5 +1,6 @@
 import json
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 from pathlib import Path
 
 from src import config, estado
@@ -19,6 +20,8 @@ def _aislar_entorno(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(config, "CONTENIDO_DIR", tmp_path / "contenido")
     monkeypatch.setattr(config, "LOGS_DIR", tmp_path / "logs")
     monkeypatch.setattr(config, "PUNTERO_CLASE", tmp_path / "clase_actual.txt")
+    monkeypatch.setattr(config, "DEEPSEEK_MODEL", "deepseek-flash")
+    monkeypatch.setattr(config, "DEEPSEEK_BASE_URL", "https://api.deepseek.com")
     monkeypatch.setattr(panel, "_dispositivos", lambda: [])
     monkeypatch.setattr(panel, "_monitores", lambda: [])
     config.LOGS_DIR.mkdir(parents=True, exist_ok=True)
@@ -75,6 +78,7 @@ def test_deepseek_log_uso_registra_tokens_de_cache_del_proveedor(
         monkeypatch, tmp_path):
     _aislar_entorno(monkeypatch, tmp_path)
     estado.crear_clase("Costo cache", curso="curso-costos")
+    monday_peak = datetime(2026, 9, 14, 2, tzinfo=timezone.utc).timestamp()
 
     class _UsageConCache:
         prompt_tokens = 1000
@@ -85,15 +89,17 @@ def test_deepseek_log_uso_registra_tokens_de_cache_del_proveedor(
     class _RespuestaConCache:
         usage = _UsageConCache()
 
-    deepseek_client._log_uso(_RespuestaConCache(), "unit-cache")
+    deepseek_client._log_uso(_RespuestaConCache(), "unit-cache",
+                            request_started=monday_peak)
 
     fila = estado.leer_jsonl(config.LOGS_DIR / "uso_api.jsonl")[-1]
     assert fila["tokens_cache_hit"] == 640
     assert fila["tokens_cache_miss"] == 360
-    # El costo registrado no cambia: los contadores son solo visibilidad.
+    # La tarifa peak distingue caché hit/miss y registra la fuente consultada.
     assert fila["costo_usd"] == round(
-        (1000 * config.COSTO_ENTRADA_USD_M
-         + 500 * config.COSTO_SALIDA_USD_M) / 1_000_000, 6)
+        (640 * 0.006 + 360 * 0.30 + 500 * 1.20) / 1_000_000, 9)
+    assert fila["estimacion_costo"]["franja_utc"] == "peak"
+    assert fila["estimacion_costo"]["version"] == "deepseek-2026-09-14"
 
 
 def test_deepseek_log_uso_acepta_cached_tokens_formato_openai(
@@ -147,7 +153,7 @@ def test_api_estado_muestra_gasto_sesion_y_curso_sin_total_global(
     assert data["costo"] == "0.200"
     assert data["costo_sesion"] == "0.200"
     assert data["costo_display"] == "Sesión $0.200 · Curso $0.300"
-    assert data["costo_etiqueta"] == "Gasto API"
+    assert data["costo_etiqueta"] == "Gasto estimado"
     assert "costo_global" not in data
     assert "costo_global_sistema" not in data
     assert len(data["costos_lecciones"]) == 2
@@ -303,3 +309,33 @@ def test_indice_costos_conserva_atribucion_metadata_y_legacy(monkeypatch, tmp_pa
     assert result["total_usd"] == expected_course
     assert {item["clase_id"]: item["costo_usd"]
             for item in result["lecciones"]} == expected_classes
+
+
+def test_costos_desconocidos_son_parciales_y_no_reescriben_legacy(monkeypatch, tmp_path):
+    _aislar_entorno(monkeypatch, tmp_path)
+    incremental_jsonl.clear_readers()
+    costos_api.clear_caches()
+    d = estado.crear_clase("Precio pendiente", curso="curso-precio")
+    _fijar_rango(d, base=1000.0)
+    _log_api(t=1010.0, costo_usd=0.125)
+    legacy = (config.LOGS_DIR / "uso_api.jsonl").read_bytes()
+    _log_api(t=1020.0, costo_usd=None,
+             estimacion_costo={"estado": "no_disponible"})
+    _log_api(t=1030.0, costo_usd=0.250,
+             estimacion_costo={"estado": "estimado"})
+    # Otra clase no contamina los contadores de esta sesión.
+    _log_api(t=1040.0, curso="otro", costo_usd=None,
+             estimacion_costo={"estado": "no_disponible"})
+    before = (config.LOGS_DIR / "uso_api.jsonl").read_bytes()
+
+    result = costos_api.resumen_curso("curso-precio", ahora=1100.0, clase_actual=d)
+    assert result["clase_actual_usd"] == 0.375
+    assert result["total_usd"] == 0.375
+    assert result["costos_son_estimaciones"] is True
+    assert result["costos_no_estimables"] == 1
+    assert result["clase_actual_no_estimables"] == 1
+    assert result["costos_historicos_sin_tarifa"] == 1
+    assert result["clase_actual_historicos_sin_tarifa"] == 1
+    assert result["lecciones"][0]["costos_no_estimables"] == 1
+    assert (config.LOGS_DIR / "uso_api.jsonl").read_bytes() == before
+    assert before.startswith(legacy)

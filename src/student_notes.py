@@ -21,7 +21,6 @@ import zipfile
 from pathlib import Path
 from xml.etree import ElementTree
 
-
 SCHEMA_VERSION = 1
 ROOT_NAME = "student_notes"
 PACKAGED_ROOT = Path("img") / ".student_notes"
@@ -216,6 +215,7 @@ def _extract_office_xml(path: Path, prefix: str, text_tag: str) -> str:
 
 def _ocr_image(path: Path) -> str:
     from PIL import Image
+
     from . import ocr
     with Image.open(path) as image:
         return str(ocr.texto_de_pil(image.convert("RGB")) or "").strip()
@@ -727,9 +727,14 @@ def _publish_image_asset(class_dir: Path | str, note: dict) -> str:
     digest = _sha256(data)
     if digest != str(original.get("sha256") or ""):
         raise RuntimeError("la imagen incluida cambió desde su captura")
-    name = f"nota_estudiante_{digest[:20]}{suffix}"
+    from .image_optimization import optimize_bytes
+    data, conversion = optimize_bytes(data)
+    if conversion["optimized"]:
+        suffix = ".webp"
+    published_digest = _sha256(data)
+    name = f"nota_estudiante_{published_digest[:20]}{suffix}"
     target = Path(class_dir) / "img" / name
-    if target.is_file() and _sha256(target.read_bytes()) != digest:
+    if target.is_file() and _sha256(target.read_bytes()) != published_digest:
         raise RuntimeError("colisión al publicar imagen de nota")
     if not target.exists():
         _atomic_bytes(target, data)

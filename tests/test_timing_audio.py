@@ -168,22 +168,22 @@ def test_clasificar_audio_navegador_distingue_voz_baja_de_pcm_mudo():
     assert mixer_bajo["guardar"] is True
     assert mixer_bajo["es_silencio"] is False
     assert mixer_bajo["navegador_activo"] is True
-    assert mixer_bajo["pcm_util"] is False
+    assert mixer_bajo["pcm_util"] is True
 
     mixer_bajo_roto = captura_audio.clasificar_muestra_audio(
         "chrome", rms=0.34, peak=1, pico_sesion=0.006, silencio_rms=120)
-    assert mixer_bajo_roto["guardar"] is False
-    assert mixer_bajo_roto["captura_rota"] is True
+    assert mixer_bajo_roto["guardar"] is True
+    assert mixer_bajo_roto["captura_rota"] is False
 
     casi_mudo = captura_audio.clasificar_muestra_audio(
         "chrome", rms=0.34, peak=1, pico_sesion=0.04, silencio_rms=120)
-    assert casi_mudo["guardar"] is False
-    assert casi_mudo["captura_rota"] is True
+    assert casi_mudo["guardar"] is True
+    assert casi_mudo["captura_rota"] is False
 
     sistema_mudo = captura_audio.clasificar_muestra_audio(
         "sistema", rms=0.34, peak=1, pico_sesion=None, silencio_rms=120)
-    assert sistema_mudo["guardar"] is False
-    assert sistema_mudo["es_silencio"] is True
+    assert sistema_mudo["guardar"] is True
+    assert sistema_mudo["es_silencio"] is False
 
 
 def test_selector_audio_no_reelige_pid_bloqueado_y_prefiere_root_pid():

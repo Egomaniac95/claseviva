@@ -1,4 +1,4 @@
-"""Cliente DeepSeek V4 Flash: reintentos, log de costos, y NUNCA crashea al llamador.
+"""Cliente DeepSeek Flash: reintentos, estimación de costos y errores contenidos.
 
 Uso:  from src.deepseek_client import preguntar
       texto = preguntar([{"role": "user", "content": "hola"}])   # -> str | None
@@ -15,6 +15,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from . import config
+from .provider_pricing import estimate_deepseek
 
 _client = None
 _USAGE_LOG_LOCK = threading.Lock()
@@ -105,27 +106,47 @@ def _tokens_cache_prefijo(usage) -> dict:
     if hit is None:
         detalles = getattr(usage, "prompt_tokens_details", None)
         hit = getattr(detalles, "cached_tokens", None)
-    if isinstance(hit, int):
+    if type(hit) is int:
         fila["tokens_cache_hit"] = hit
-    if isinstance(miss, int):
+    if type(miss) is int:
         fila["tokens_cache_miss"] = miss
     return fila
 
 
-def _log_uso(respuesta, etiqueta: str, usage_id: str | None = None) -> None:
+def _log_uso(respuesta, etiqueta: str, usage_id: str | None = None, *,
+             request_started: float | None = None) -> None:
     try:
         u = respuesta.usage
-        costo = (u.prompt_tokens * config.COSTO_ENTRADA_USD_M
-                 + u.completion_tokens * config.COSTO_SALIDA_USD_M) / 1_000_000
+        now = time.time()
+        response_model = getattr(respuesta, "model", None)
+        response_model = response_model if isinstance(response_model, str) and response_model else None
+        model = response_model or config.DEEPSEEK_MODEL
+        cache = _tokens_cache_prefijo(u)
+        estimate = estimate_deepseek(
+            model=model, base_url=config.DEEPSEEK_BASE_URL,
+            prompt_tokens=u.prompt_tokens, completion_tokens=u.completion_tokens,
+            timestamp=now if request_started is None else request_started,
+            cache_hit=cache.get("tokens_cache_hit"),
+            cache_miss=cache.get("tokens_cache_miss"),
+            time_basis="respuesta_local" if request_started is None else "inicio_peticion_local",
+            model_basis="respuesta" if response_model else "solicitado_sin_confirmar",
+        )
         config.ensure_dirs()
         fila = {
-            "t": time.time(), "etiqueta": etiqueta, "modelo": config.DEEPSEEK_MODEL,
+            "t": now, "etiqueta": etiqueta, "modelo": model,
+            "modelo_solicitado": config.DEEPSEEK_MODEL,
+            "modelo_respuesta": response_model,
             "tokens_entrada": u.prompt_tokens, "tokens_salida": u.completion_tokens,
-            "costo_usd": round(costo, 6),
             "usage_id": str(
                 usage_id or getattr(respuesta, "id", "") or uuid.uuid4().hex),
         }
-        fila.update(_tokens_cache_prefijo(u))
+        choices = getattr(respuesta, "choices", None)
+        if choices:
+            fila["finish_reason"] = getattr(choices[0], "finish_reason", None)
+        if request_started is not None:
+            fila["duration_seconds"] = round(max(0.0, now - request_started), 3)
+        fila.update(cache)
+        fila.update(estimate)
         fila.update(_contexto_uso_api())
         path = config.LOGS_DIR / "uso_api.jsonl"
         with _USAGE_LOG_LOCK, _usage_file_lock(path):
@@ -186,8 +207,9 @@ def preguntar_detalle(mensajes: list[dict], max_tokens: int = 2048,
                 request["extra_body"] = {
                     "thinking": {"type": "enabled" if thinking else "disabled"}
                 }
+            request_started = time.time()
             r = _cliente().chat.completions.create(**request)
-            _log_uso(r, etiqueta, usage_id=usage_id)
+            _log_uso(r, etiqueta, usage_id=usage_id, request_started=request_started)
             choice = r.choices[0]
             texto = choice.message.content if choice.message else None
             return {
@@ -210,10 +232,17 @@ def preguntar_detalle(mensajes: list[dict], max_tokens: int = 2048,
 def preguntar(mensajes: list[dict], max_tokens: int = 2048, temperature: float = 0.3,
               etiqueta: str = "", timeout: float | None = None, *,
               thinking: bool | None = None) -> str | None:
-    """Llama a la API con 3 intentos y backoff. Devuelve el texto o None (jamás lanza)."""
-    return preguntar_detalle(
+    """Devuelve texto completo o None; el detalle permite gestionar cortes."""
+    detalle = preguntar_detalle(
         mensajes, max_tokens=max_tokens, temperature=temperature,
-        etiqueta=etiqueta, timeout=timeout, thinking=thinking).get("texto")
+        etiqueta=etiqueta, timeout=timeout, thinking=thinking)
+    finish_reason = detalle.get("finish_reason")
+    if finish_reason not in (None, "stop"):
+        config.log_error(
+            "deepseek", f"Respuesta incompleta para etiqueta={etiqueta!r}: "
+            f"finish_reason={finish_reason}; max_tokens={max_tokens}")
+        return None
+    return detalle.get("texto")
 
 
 def costo_acumulado() -> float:
@@ -222,7 +251,7 @@ def costo_acumulado() -> float:
     if p.is_file():
         for ln in p.read_text(encoding="utf-8").splitlines():
             try:
-                total += json.loads(ln).get("costo_usd", 0.0)
+                total += json.loads(ln).get("costo_usd", 0.0) or 0.0
             except Exception:
                 continue
     return total

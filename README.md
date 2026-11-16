@@ -1,95 +1,152 @@
 # ClaseViva
 
-ClaseViva captura audio y evidencia visual de clases, webinars y videos, crea pausas de
-estudio periódicas y consolida una lección Markdown autocontenida.
+**A local-first class capture system that turns a live lecture into a complete, study-ready lesson — not a summary.**
 
-## Inicio habitual
+ClaseViva records a class's audio and screen while it happens, transcribes it through a
+failover chain of speech-to-text providers, takes structured notes every five minutes,
+and afterwards consolidates **everything that was said** — developments, questions,
+examples and code — into a single self-contained Markdown/HTML lesson, with the full
+transcript embedded and verified inside it.
 
-Haz doble clic en `ClaseViva.vbs`. Ese archivo usa
-`.venv\Scripts\pythonw.exe`, ejecuta `lanzador.py` y abre el panel local en
-`http://127.0.0.1:8756`.
+Built and used in production by its author for his own Data Science master's classes
+since July 2026: 13 classes processed end to end.
 
-`init.ps1` no inicia la aplicación ni instala paquetes: es un preflight de solo lectura.
-`autorizar_red.ps1` es opcional y normalmente no se necesita porque el panel solo escucha
-en localhost.
+> 🇪🇸 *Versión en español más abajo · Manual técnico completo en [MANUAL_TECNICO.md](MANUAL_TECNICO.md)*
 
-## Instalación o reparación
+![Python](https://img.shields.io/badge/python-3.12-blue)
+![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
+![Tests](https://img.shields.io/badge/tests-952%20passing-brightgreen)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-Requiere Windows y Python 3.12. La instalación se mantiene dentro de `.venv`:
+## Why it exists
 
-```powershell
-py -3.12 -m venv .venv
-.venv\Scripts\python.exe -m pip install --upgrade pip
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-if (-not (Test-Path .env)) { Copy-Item .env.example .env }
-powershell -NoProfile -ExecutionPolicy Bypass -File .\init.ps1
+Most transcription tools hand you a summary and throw away the source. ClaseViva was
+designed around the opposite principle: **the final lesson must contain everything that
+was said in class, structured and enriched for detailed study — and the raw transcript
+must survive inside the lesson itself**, so the paraphrase never becomes the only record.
+
+## How it works
+
+```text
+Audio (30 s chunks) ──► STT failover chain ──► incremental transcript
+Screen captures ──────► visual evidence (WebP, hash-verified)
+                              │
+        live notes every 5 min (DeepSeek Flash, no tools)
+                              │
+        Consolidate ──► detailed per-segment development
+                        + full transcript embedded in the lesson
+                        + coverage check per segment (≥ 35 % of prose,
+                          one retry, visible warning if still short)
+                        + transactional compaction with rollback
+                              │
+              leccion_final.md / leccion_final.html + img/
 ```
 
-Completa las claves necesarias en `.env`; nunca lo compartas ni lo incorpores a Git.
-`requirements.txt` contiene el runtime. `requirements-dev.txt` solo añade pytest, Ruff y
-herramientas de QA para quien vaya a revisar el código:
+- **STT failover, sequential by design:** AssemblyAI Universal-3.5 Pro → Deepgram
+  Nova-3 → Speechmatics Melia-1 → Groq Whisper Large v3. A valid commit is never
+  re-transcribed or re-billed; a 402 suspends a provider for an hour while the next
+  one keeps working.
+- **Local voice activity:** Silero VAD runs on CPU (no PyTorch). Since the November
+  2026 fidelity pass, only *digitally silent* audio (all-zero samples) is discarded —
+  quiet speech is always kept and sent.
+- **One LLM, deliberately:** DeepSeek Flash via `chat.completions`, no tools,
+  `thinking=False`. Web context is fetched directly (Bing RSS / DuckDuckGo + page
+  download) at zero tool cost — never through paid search endpoints.
+- **OCR is local and free** (Windows OCR, RapidOCR fallback).
+
+## Engineering highlights
+
+- **Append-only audio manifest with SHA-256** per chunk; atomic writes
+  (tmp → fsync → replace); per-process state locks. An abrupt shutdown loses at most
+  the unsealed 30-second chunk, and consolidation resumes from valid commits.
+- **Transactional cleanup:** the full transcript is embedded in the final lesson
+  (readable appendix + base64 payload with segment count and SHA-256) and *validated*
+  before any working file is deleted; deletion itself is staged with a manifest and
+  rollback, and interrupted cleanups are recovered automatically.
+- **Code survives verbatim:** code fences are protected with hash tokens through the
+  merge/sanitize pipeline, so capitalization, indentation and comments reach the
+  lesson byte-for-byte.
+- **Cost accounting that reconciles:** every API call is logged with token counts
+  (including prefix-cache hits) and a versioned price estimate. Reconciled against
+  DeepSeek's official usage export for 2026-11-14: **116 calls, hit/miss/output
+  tokens identical to the token**, estimate within ~7 % of the invoiced amount.
+
+## Measured cost (author's real usage, Jul–Nov 2026)
+
+| Metric | Value |
+|---|---:|
+| LLM calls logged | 705 |
+| Total LLM spend | **US$ 1.57** |
+| Average per month | ≈ US$ 0.42 |
+| Most expensive class day (6.2 h class, 116 calls) | US$ 0.27 estimated / ≈ US$ 0.26 invoiced |
+| Speech-to-text | US$ 0 (free tiers of all four providers) |
+
+## Tests
+
+952 tests passing (plus one hypothesis property test that runs without its 5-second
+deadline). The suite covers the audio manifest, STT failover, consolidation,
+coverage checks, transactional cleanup and cost accounting.
 
 ```powershell
 .venv\Scripts\python.exe -m pip install -r requirements-dev.txt
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts\run_dev_checks.ps1
+.venv\Scripts\python.exe -m pytest
 ```
 
-## Flujo y datos
+## Quick start (from source, Windows, Python 3.12)
 
-Antes de grabar selecciona fuente de audio y pantalla y autoriza el STT remoto. El
-failover es secuencial: AssemblyAI Universal-3.5 Pro → Deepgram Nova-3 multilingüe →
-Speechmatics Melia-1 multilingüe → Groq `whisper-large-v3`. Solo se construyen adaptadores
-cuya clave exista en `.env`; no hay Whisper local ni solicitudes paralelas.
-
-La transcripción es interna: alimenta resúmenes y la lección, pero no se renderiza en
-vivo. Captura, WAV, hashes, manifest, commits y recuperación permanecen locales. El
-silencio comprobado localmente no se envía. Un commit válido evita retranscribir o volver
-a cobrar un chunk. Si se agota la cadena, se conserva el WAV pendiente.
-
-```text
-contenido/<curso>/
-  CURSO.md
-  TAREAS.md
-  resumenes/
-  clases/<clase>/
+```powershell
+py -3.12 -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+Copy-Item .env.example .env   # fill in your API keys
+.\ClaseViva.vbs               # opens the local panel at http://127.0.0.1:8756
 ```
 
-Al **Consolidar**, la lección se publica primero. La compactación solo elimina evidencia
-si no hay audio o commits pendientes, las notas están decididas y cada referencia cumple
-tamaño y SHA-256. Si un gate falla, la lección sigue disponible y la evidencia se conserva
-con un motivo recuperable. El paquete final reanudable queda en:
+A portable Windows build (`ClaseViva.exe`, no Python required) is described in
+[WINDOWS_PORTABLE.md](WINDOWS_PORTABLE.md).
 
-```text
-leccion_final.md
-img/
-```
+## Known limitations (declared, not hidden)
 
-**Continuar clase anterior** reconstruye el estado mínimo desde ese paquete. Desde Inicio
-también se puede mover una clase o curso a la Papelera mediante vista previa, nombre exacto
-y revalidación del fingerprint.
+- Batch by design: 30-second audio chunks and 5-minute note intervals — the live
+  lesson is a structured summary; the *final* lesson is the complete record.
+- A single sequential STT worker: one pathological chunk can delay the queue
+  (measured impact on real classes: median transcription 6.1 s per chunk, p95 12.4 s).
+- Two large modules (`panel.py`, `post_procesar.py`) remain from the app's growth;
+  prompt extraction is planned. Style lint is being cleaned up progressively
+  (critical rules pass; no correctness findings).
 
-## Notas del estudiante
+Full audit history and design contracts live in `PROJECT_STATE.md` and `history/`.
 
-Texto, documentos, imágenes, capturas, fotografías y voz se guardan por acción explícita.
-Se pueden excluir o descartar y la lección las distingue de lo dicho por el profesor. La
-voz se transcribe después de **Fin** y requiere confirmación antes de subirla al STT remoto.
+## License
 
-## Módulos clave
+MIT — see [LICENSE](LICENSE).
 
-- `lanzador.py`: inicia el panel y supervisa exclusivamente procesos propios.
-- `src/panel.py`: UI/API; coordina Inicio, Pausa, Fin y Consolidar.
-- `src/captura_audio.py`: único propietario del stream; sella WAV canónicos.
-- `src/audio_manifest.py`: orden, hashes, estado append-only y recuperación.
-- `src/transcriptor_vivo.py` y `src/stt_backend.py`: cola incremental y failover remoto.
-- `src/captura_pantalla.py`: evidencia visual y selección de monitor.
-- `src/escriba.py`: pausa de estudio incremental cada cinco minutos útiles.
-- `src/student_notes.py`: originales, procedencia, edición e inclusión de notas.
-- `src/post_procesar.py`: integra transcript, visuales y notas en la lección.
-- `src/study_package.py`: valida y compacta transaccionalmente.
-- `src/content_management.py`: confinamiento y traslado reversible a la Papelera.
+---
 
-## Auditoría de la versión
+# ClaseViva (español)
 
-`PROJECT_STATE.md` resume contratos, validaciones y riesgos abiertos. Las pruebas usan
-directorios temporales fuera del repositorio. `.env`, `contenido/**`, `logs/**`,
-`backups/**` y la evidencia real no pertenecen al historial Git.
+**Un sistema local de captura de clases que convierte una clase en vivo en una lección
+completa y lista para estudiar — no en un resumen.**
+
+ClaseViva graba el audio y la pantalla de la clase mientras ocurre, la transcribe con
+una cadena de proveedores STT con failover secuencial, toma apuntes estructurados cada
+cinco minutos y, al terminar, consolida **todo lo dicho** —desarrollos, preguntas,
+ejemplos y código— en una lección Markdown/HTML autocontenida, con la transcripción
+íntegra incrustada y verificada dentro de ella.
+
+- **Principio de diseño:** la paráfrasis nunca es el único registro; la fuente
+  (transcripción completa) viaja dentro de la lección final.
+- **Durabilidad:** manifiesto de audio append-only con SHA-256, escrituras atómicas,
+  limpieza transaccional con rollback y recuperación de consolidaciones interrumpidas.
+- **Costo medido real:** US$ 1,57 en 705 llamadas (jul–nov 2026); STT a costo cero
+  en cuotas gratuitas; contabilidad de tokens conciliada al detalle contra la
+  facturación oficial del proveedor.
+- **Calidad verificada:** 952 pruebas; el manual técnico completo, los contratos de
+  diseño y el historial de auditorías están en el repositorio.
+
+Instalación, flujo de datos y módulos clave: [MANUAL_TECNICO.md](MANUAL_TECNICO.md).
+
+---
+
+*Created by Angel Christopher Ramirez Gomero — molecular biologist & data science
+master's student, building at the intersection of the genetic code and the other kind
+of code. ([Doble Código](https://github.com/egomaniac95))*

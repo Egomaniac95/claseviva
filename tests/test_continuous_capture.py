@@ -276,6 +276,38 @@ def test_watchdog_no_confunde_silencio_del_navegador_con_ruta_rota():
     assert watchdog.picos == [0.0, 0.0]
 
 
+def test_watchdog_consulta_sesiones_solo_ante_pcm_plano():
+    consultas = []
+    watchdog = captura_audio.WatchdogCaptura(
+        "chrome", obtener_pico=lambda fuente: consultas.append(fuente) or 0.2)
+    watchdog.observar(struct.pack("<h", 2000) * 3000, rate=100, canales=1)
+    assert consultas == []
+    watchdog.observar(b"\0\0" * 100, rate=100, canales=1)
+    # La voz vuelve antes de la segunda ventana plana y reinicia el contador.
+    watchdog.observar(struct.pack("<h", 2000) * 100, rate=100, canales=1)
+    watchdog.observar(b"\0\0" * 100, rate=100, canales=1)
+    assert consultas == ["chrome", "chrome"]
+
+
+def test_dispositivo_preserva_pcm_previo_al_watchdog():
+    capturador = object.__new__(captura_audio.CapturadorDispositivo)
+    capturador.frame_bytes = 2
+    capturador.rate = 100
+    capturador.canales = 1
+    capturador.stream_id = "device-watchdog"
+    capturador.wall_anchor = 1000.0
+    capturador._delivered_frames = 3000
+    voz = struct.pack("<h", 2000) * 1000
+    capturador._pendiente = bytearray(voz + b"\0\0" * 200)
+    data, rate, channels, continuity = capturador.extraer_parcial()
+    assert data == voz + b"\0\0" * 200
+    assert (rate, channels) == (100, 1)
+    assert continuity["pcm_wall_start"] == 1030.0
+    assert continuity["pcm_wall_end"] == 1042.0
+    assert continuity["terminal_discontinuity"] is True
+    assert capturador.extraer_parcial()[0] == b""
+
+
 def test_process_loopback_recorta_solape_sin_inventar_gap_siguiente():
     capturador = object.__new__(loopback_proceso.CapturadorProceso)
     capturador.frame_bytes = 2
@@ -386,11 +418,33 @@ def test_process_loopback_rechaza_salto_de_posicion_descontrolado():
         capturador._anexar_paquete(b"\x05\x00" * 2, 2, 500)
 
 
-def test_rms_y_peak_submuestrean_ambos_canales_estereo():
+def test_rms_y_peak_revisan_ambos_canales_estereo():
     pcm = b"".join(struct.pack("<hh", 0, 1200) for _ in range(300))
 
     assert captura_audio.calcular_rms(pcm) > 700
     assert captura_audio.calcular_peak(pcm) == 1200
+
+
+def test_peak_conserva_muestra_tenue_fuera_del_submuestreo_rms():
+    pcm = b"\x00\x00\x01\x00" + b"\x00\x00" * 198
+    assert captura_audio.calcular_rms(pcm) == 0
+    assert captura_audio.calcular_peak(pcm) == 1
+    assert captura_audio.calcular_peak(struct.pack("<h", -32768)) == 32768
+
+
+def test_metricas_wav_no_cancelan_canales_en_contrafase(tmp_path):
+    ruta = tmp_path / "antifase.wav"
+    with wave.open(str(ruta), "wb") as wf:
+        wf.setnchannels(2)
+        wf.setsampwidth(2)
+        wf.setframerate(16000)
+        wf.writeframes(struct.pack("<hh", 1, -1) * 16000)
+
+    metricas = captura_audio.metricas_wav(ruta)
+    assert metricas["useful_audio"] is True
+    assert metricas["rms"] == 1
+    assert metricas["peak"] == 1
+    assert metricas["rms_ventanas"] == [1]
 
 
 def test_pcm_fuerte_no_se_descarta_si_medidor_de_sesion_esta_en_cero():
@@ -407,6 +461,18 @@ def test_watchdog_no_publica_pcm_parcial_plano():
         b"\x00\x00" * 200, canales=1, silencio_rms=300) is False
     assert captura_audio.pcm_parcial_publicable(
         b"\xd0\x07" * 200, canales=1, silencio_rms=300) is True
+    # Una muestra tenue fuera del submuestreo de RMS también es evidencia.
+    assert captura_audio.pcm_parcial_publicable(
+        b"\x00\x00\x01\x00" + b"\x00\x00" * 198, canales=1) is True
+
+
+def test_watchdog_does_not_discard_faint_nonzero_windows():
+    watchdog = captura_audio.WatchdogCaptura(
+        "chrome", obtener_pico=lambda _: pytest.fail("PCM no nulo"))
+    watchdog.observar(b"\x01\x00" * 300, rate=100, canales=1)
+    decision = captura_audio.clasificar_muestra_audio(
+        "sistema", rms=0, peak=0, pico_sesion=None, silencio_digital=False)
+    assert decision["guardar"] and not decision["es_silencio"]
 
 
 def test_dispositivo_expone_reloj_pcm_derivado_de_frames(monkeypatch):
@@ -525,6 +591,38 @@ def test_wasapi_data_discontinuity_se_declara_y_conserva_parcial():
     assert continuidad["terminal_discontinuity"] is True
     assert continuidad["pcm_wall_end"] == pytest.approx(5000.01)
     assert capturador._capture.release_calls == 1
+
+
+def test_wasapi_libera_buffer_antes_de_consultar_watchdog(monkeypatch):
+    raw = (ctypes.c_ubyte * 4)(*b"\x10\x00\x20\x00")
+    eventos = []
+
+    class CaptureFalso:
+        def GetNextPacketSize(self):
+            return 0 if eventos else 2
+
+        def GetBuffer(self):
+            return ctypes.cast(raw, ctypes.POINTER(ctypes.c_ubyte)), 2, 0, 0, 0
+
+        def ReleaseBuffer(self, frames):
+            assert frames == 2
+            eventos.append("liberado")
+
+    capturador = object.__new__(loopback_proceso.CapturadorProceso)
+    capturador._capture = CaptureFalso()
+    capturador.frame_bytes = 2
+    capturador.rate = 100
+    capturador.canales = 1
+    monkeypatch.setattr(capturador, "_anexar_paquete", lambda *_a, **_kw: None)
+
+    def inspeccionar(data, rate, channels):
+        assert eventos == ["liberado"]
+        assert data == b"\x10\x00\x20\x00"
+        assert (rate, channels) == (100, 1)
+        eventos.append("inspeccionado")
+
+    assert capturador._drenar_paquetes(inspector=inspeccionar) == 2
+    assert eventos == ["liberado", "inspeccionado"]
 
 
 def test_recuperacion_huerfana_requiere_manifest_preexistente(tmp_path):
@@ -1310,8 +1408,9 @@ def test_close_delega_release_de_interfaces_a_comtypes():
     assert capture.release_calls == 0
 
 
+@pytest.mark.parametrize("watchdog_failure", [False, True])
 def test_fallo_tardio_publica_parcial_y_abre_nuevo_intento_para_fallback(
-        monkeypatch, tmp_path):
+        monkeypatch, tmp_path, watchdog_failure):
     (tmp_path / "audio").mkdir()
     reloj = {"t": 1000.1}
     estado = {
@@ -1345,6 +1444,8 @@ def test_fallo_tardio_publica_parcial_y_abre_nuevo_intento_para_fallback(
 
         def leer(self, *_args, **_kwargs):
             reloj["t"] = 1000.8
+            if watchdog_failure:
+                raise captura_audio.CapturaRotaTemprana(0, 0, 0.2, 2)
             raise OSError("ruta WASAPI interrumpida")
 
         def extraer_parcial(self):
@@ -1432,7 +1533,9 @@ def test_fallo_tardio_publica_parcial_y_abre_nuevo_intento_para_fallback(
     sellados = [e for e in eventos if e.get("status") == "sealed"]
     parcial = next(e for e in sellados if e.get("capture_partial"))
     fallback = next(e for e in sellados if not e.get("capture_partial"))
-    assert parcial["reason"] == "process_loopback_failed_after_partial"
+    assert parcial["reason"] == (
+        "watchdog_pcm_flat_after_partial" if watchdog_failure
+        else "process_loopback_failed_after_partial")
     assert parcial["frame_count"] == 50
     assert parcial["duration"] == pytest.approx(0.5)
     assert parcial["terminal_discontinuity"] is True

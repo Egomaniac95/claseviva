@@ -11,6 +11,7 @@
 - Vigilante de hijos (modo app): si un proceso propio muere, lo reinicia con límites
   y muestra su estado en la UI; STT permanece exclusivamente remoto.
 """
+import base64
 import contextlib
 import html
 import json
@@ -18,11 +19,11 @@ import os
 import re
 import signal
 import subprocess
-import sys
 import tempfile
 import threading
 import time
 import uuid
+from collections import OrderedDict
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlparse
@@ -47,11 +48,14 @@ from .runtime_shutdown import (
     stop_owned_children,
 )
 SPOOL_FILENAME = "stt-preview.slot"
+_COPILOTO_LOCK = threading.Lock()
+_COPILOTO_ACTIVOS: set[str] = set()
+_COPILOTO_RESPUESTAS: OrderedDict = OrderedDict()
 ACK_FILENAME = "stt-preview.ack.json"
 STATE_FILENAME = "stt-preview.state.json"
 
 try:
-    from flask import Flask, jsonify, request, send_from_directory
+    from flask import Flask, jsonify, request, send_file, send_from_directory
 except ImportError:
     raise SystemExit("Falta flask: .venv\\Scripts\\python.exe -m pip install flask markdown")
 
@@ -80,6 +84,8 @@ def _safe_href(url: str) -> str:
 
 def _safe_img_src(url: str) -> str:
     url = str(url or "").strip()
+    if re.fullmatch(r"(?:\./)?img/[A-Za-z0-9_.-]+", url):
+        return "/" + url.removeprefix("./")
     if re.fullmatch(r"/img/[A-Za-z0-9_.-]+", url):
         return url
     parsed = urlparse(url)
@@ -210,14 +216,26 @@ try:
     import markdown as md
 
     def a_html(texto: str) -> str:
+        from .study_package import protect_source_transcript, strip_metadata
+        # Metadata de recuperación permanece en el Markdown original, nunca
+        # ocupa la lectura del estudiante ni entra al normalizador matemático.
+        texto = strip_metadata(texto)
+        texto, source_replacements = protect_source_transcript(texto)
+        # Legacy answers may end with an unfinished external link. Markdown
+        # otherwise consumes later paragraphs (including class images) as URL.
+        texto = re.sub(r'(\[[^\]\n]+\]\(https?://[^\s)]+)(?=\r?\n[ \t]*\r?\n)',
+                       r'\1)', texto)
         texto = re.sub(
             r'(<img\s+[^>]*?src=["\'])img/([A-Za-z0-9_.-]+)(["\'])',
             r'\1/img/\2\3', str(texto or ""), flags=re.I)
         texto, math_replacements = math_render.protect_math(texto)
         raw = md.markdown(texto, extensions=["tables", "fenced_code", "sane_lists"],
                           output_format="html5")
-        return math_render.restore_math(
+        rendered = math_render.restore_math(
             sanitize_markdown_html(raw), math_replacements)
+        for token, source_html in source_replacements.items():
+            rendered = rendered.replace(f"<p>{token}</p>", sanitize_markdown_html(source_html))
+        return rendered
 except ImportError:
     def a_html(texto: str) -> str:
         return "<pre>" + html.escape(str(texto or "")) + "</pre>"
@@ -449,6 +467,8 @@ PAGINA = """<!doctype html><html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="Panel local de ClaseViva para transcripción, capturas, copiloto y consolidación de clases.">
 <meta name="theme-color" content="#F8FBFF">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" href="/assets/claseviva.png">
 <style>
  :root{color-scheme:dark;--bg:#10131e;--text:#f5f7fb;--mut:#aeb8c8;--mut2:#788497;--panel:rgba(20,27,43,.82);--panel2:rgba(255,255,255,.06);--line:rgba(232,242,248,.15);--line2:rgba(232,242,248,.24);--cyan:#45d4df;--mint:#8dd5bf;--gold:#d8b366;--rose:#e0717a;--green:#55bf89;--shadow:0 28px 80px rgba(1,7,18,.42);--r:14px;--max:1720px;--font:Aptos,"Segoe UI Variable","Segoe UI",system-ui,sans-serif;--display:Bahnschrift,"Aptos Display",Aptos,"Segoe UI",system-ui,sans-serif}
  *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;min-height:100dvh;color:var(--text);font-family:var(--font);font-variant-numeric:tabular-nums;background:var(--bg);overflow:auto}
@@ -591,8 +611,22 @@ PAGINA = """<!doctype html><html lang="es"><head><meta charset="utf-8">
  details.panel-student-notes{grid-area:notes;padding:0!important;overflow:visible}details.panel-student-notes>summary{list-style:none;cursor:pointer;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px}details.panel-student-notes>summary::-webkit-details-marker{display:none}details.panel-student-notes>summary:after{content:"abrir";color:#145fb8;font-size:12px}details.panel-student-notes[open]>summary:after{content:"cerrar"}.student-notes-body{padding:0 18px 18px}.student-note-compose{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:8px;align-items:end}.student-note-text{width:100%;min-height:84px;resize:vertical;padding:10px;border:1px solid rgba(70,55,110,.20);border-radius:12px;background:rgba(255,255,255,.76);color:#172033;font:inherit}.student-note-files{display:none}.student-note-hint{margin:8px 0 12px;color:#526071;font-size:12px}.student-notes-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px}.student-note-card{padding:12px;border:1px solid rgba(70,55,110,.15);border-radius:14px;background:rgba(255,255,255,.70);box-shadow:inset 0 1px 0 rgba(255,255,255,.88)}.student-note-card header{position:static;display:flex;min-height:0;padding:0;background:none;border:0;box-shadow:none;backdrop-filter:none;justify-content:space-between}.student-note-card header b{color:#172033}.student-note-card small{color:#66758a}.student-note-card p{white-space:pre-wrap;color:#29354a;max-height:140px;overflow:auto}.student-note-card textarea{width:100%;min-height:68px;resize:vertical;padding:8px;border:1px solid rgba(70,55,110,.17);border-radius:10px;background:#fff;color:#172033;font:inherit}.student-note-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:8px}.student-note-actions label{display:flex;align-items:center;gap:5px;margin:0}.student-note-actions input{width:16px!important;min-width:16px;min-height:16px;box-shadow:none!important}.student-note-actions button{min-height:34px;padding:7px 10px}.student-note-empty{color:#66758a;font-size:13px}@media(max-width:760px){.student-note-compose{grid-template-columns:1fr}.student-note-compose button{width:100%}.student-notes-list{grid-template-columns:1fr}}
 .student-note-draft{margin:0 0 12px;padding:12px;border:1px solid rgba(195,17,208,.20);border-radius:14px;background:rgba(236,194,255,.14)}.student-note-draft img,.student-note-draft audio{display:block;max-width:100%;max-height:220px;margin-bottom:8px}.student-note-draft-actions{display:flex;gap:8px;justify-content:flex-end}.student-note-card.is-discarded{opacity:.68}.local-intervention{margin:0 0 12px;padding:12px;border:1px solid rgba(20,95,184,.20);border-radius:14px;background:rgba(219,239,255,.42)}.local-intervention-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px}.local-intervention-controls{display:flex;align-items:end;gap:8px;flex-wrap:wrap}.local-intervention-controls label{min-width:240px;flex:1}.local-intervention-controls select{width:100%;min-height:38px}.local-intervention-status{margin-top:8px;color:#41536a;font-size:12px}.local-intervention-status.is-recording{color:#a10d25;font-weight:700}.local-intervention-preview{margin-top:10px}.local-intervention-preview audio{width:100%}@media(max-width:760px){.local-intervention-controls{display:grid;grid-template-columns:1fr}.local-intervention-controls label{min-width:0}.local-intervention-controls button{width:100%}}
  .content-nav{display:inline-flex;gap:6px;margin-left:auto}.content-nav button{min-height:30px!important;padding:5px 9px!important;font-size:12px;background:rgba(255,255,255,.72)!important;color:#244e9a!important;border-color:rgba(70,55,110,.16)!important}.content-nav button:hover{box-shadow:0 8px 18px rgba(93,138,235,.16)!important}.course-content-nav{display:flex;justify-content:flex-end;margin:0 0 6px}#leccion,#cursohtml,#postlog,#chat,.student-note-card p{scrollbar-gutter:stable;overflow-wrap:anywhere;overscroll-behavior:contain}.md pre{max-width:100%;white-space:pre;overflow:auto}.md table{display:block;max-width:100%;overflow-x:auto!important}.md th,.md td{overflow-wrap:anywhere}.lesson-body{overflow-x:auto!important}.operational-status span:last-child{white-space:normal!important;overflow:visible!important;text-overflow:clip!important}
+ .source-select{position:relative;min-width:0}.source-select select{display:block;width:100%;min-width:0;padding-left:38px!important}.source-icon{width:24px;height:24px;flex:none;vertical-align:middle}.source-select>.source-icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:19px;height:19px;z-index:1;pointer-events:none}.source-refresh-icons{display:inline-flex;gap:3px;vertical-align:middle;margin-right:5px}.source-refresh-icons .source-icon{width:18px;height:18px}.source-status{display:flex;align-items:center;gap:9px;color:#41536a;font-size:12px;line-height:1.5;white-space:normal;overflow-wrap:anywhere;margin:0;padding:9px 12px;border:1px solid rgba(70,55,110,.12);border-radius:11px;background:rgba(255,255,255,.55)}.source-status:empty{display:none}.source-status strong{color:#172033;font-weight:650;flex:none}.source-status-dot{width:7px;height:7px;flex:none;border-radius:50%;background:#8290a3}.source-status[data-state="signal"] .source-status-dot{background:#008971}.source-status[data-state="muted"] .source-status-dot,.source-status[data-state="missing"] .source-status-dot{background:#bc6a2a}.controlgrid>.audio-source-field{grid-column:span 2!important}#startRefreshSources{align-self:end;min-height:38px;margin:0}.start-consent{grid-column:span 9!important;min-height:38px;margin:0!important;display:flex!important;align-items:center}.start-submit{grid-column:span 3!important;align-self:center;min-height:38px}.source-help,.setup-help{margin:9px 0 0;color:#526071;font-size:12px;line-height:1.5}.setup-help summary{cursor:pointer;font-weight:700}.setup-help p{margin:8px 0}.timechip{flex-shrink:0}.timechip b{white-space:nowrap;font-family:Consolas,"Cascadia Mono",monospace}.brand-mark{object-fit:contain;border-radius:12px}.lesson-body:focus-visible,#cursohtml:focus-visible,textarea:focus-visible{outline:3px solid #135f9d!important;outline-offset:2px}
+ @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*:before,*:after{animation:none!important;transition:none!important}.brand-mark{filter:none}}
+ @media(min-width:761px) and (max-width:980px){.start-consent{grid-column:span 4!important;max-width:100%;white-space:normal!important}.start-submit{grid-column:span 2!important}}
+ #toast{width:max-content;max-width:min(680px,calc(100vw - 32px))}#toast:not(.ver){visibility:hidden;pointer-events:none}
+ .source-select.has-system-icons>select{position:absolute;inset:0;opacity:0;pointer-events:none;z-index:-1}.source-picker-toggle{display:block;width:100%;min-height:44px;padding:10px 34px 10px 38px!important;border:1px solid rgba(70,55,110,.20)!important;border-radius:10px!important;background:rgba(255,255,255,.72)!important;color:#172033!important;font:inherit;font-size:13px;text-align:left;font-weight:400!important}.source-picker-toggle:after{content:"";position:absolute;right:14px;top:45%;width:6px;height:6px;border-right:2px solid #172033;border-bottom:2px solid #172033;transform:rotate(45deg)}.source-picker-text{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.source-native-icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:20px;height:20px;object-fit:contain;pointer-events:none;z-index:2}.source-picker-list{position:absolute;left:0;right:0;top:calc(100% + 5px);z-index:60;max-height:280px;overflow:auto;padding:5px;border:1px solid #c8d5e5;border-radius:12px;background:#fff;box-shadow:0 12px 28px rgba(44,60,86,.18)}.source-picker-list[hidden]{display:none}.source-picker-option{display:flex;align-items:center;gap:10px;width:100%;min-height:38px;padding:7px 9px!important;border:0!important;border-radius:7px!important;background:transparent!important;color:#172033!important;box-shadow:none!important;transform:none!important;font-size:13px;font-weight:400!important;text-align:left}.source-picker-option:hover,.source-picker-option:focus-visible{background:#edf6fa!important}.source-picker-option[aria-selected="true"]{background:#e4f4f9!important;font-weight:650!important}.source-option-icon{position:relative;display:block;width:22px;height:22px;flex:none}.source-option-icon svg,.source-option-icon img{position:absolute;inset:0;width:22px;height:22px;object-fit:contain}.source-option-icon img[hidden],.source-native-icon[hidden]{display:none}.source-popup-open{overflow:visible!important;z-index:55!important}.source-select.is-open{z-index:60}
+ @media(max-width:760px){.controlgrid>.audio-source-field,.start-consent,.start-submit{grid-column:1/-1!important}.source-refresh-icons{display:none}.source-select select{width:100%}.source-status{align-items:flex-start;flex-wrap:wrap;font-size:12px}.source-status-dot{margin-top:6px}.source-status-detail{flex-basis:100%;padding-left:16px}.start-consent{width:100%!important;white-space:normal!important}}
+ .panel-copilot{display:flex!important;flex-direction:column;min-width:0}.panel-copilot .chatbar{order:1}.panel-copilot .webtoggle{order:2}.panel-copilot #cap_previa{order:3}.panel-copilot .chat-reading-controls{order:4;margin:12px 0 6px;display:flex;gap:8px;align-items:center}.panel-copilot #chat{order:5;min-height:180px!important;max-height:65vh!important;overflow:auto!important;position:relative}.panel-copilot #chat.expanded{max-height:none!important;overflow:visible!important}.panel-copilot #chat .a{max-height:none;overflow:visible;white-space:normal}.panel-copilot #chat:focus-visible{outline:3px solid #135f9d}.chat-reading-controls small{color:#526071}
+ #controles{position:relative!important;top:auto!important}.panel-copilot .chatbar,.panel-copilot #chat{scroll-margin-top:100px}
  </style></head><body>
 <a class="skip" href="#contenido">Saltar al contenido</a>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+ <symbol id="source-chrome" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="#fbbc05"/><path d="M12 12 2.5 6.5A11 11 0 0 1 22.5 9H12z" fill="#ea4335"/><path d="M12 12 6.5 21.5A11 11 0 0 1 2.5 6.5z" fill="#34a853"/><circle cx="12" cy="12" r="5" fill="#4285f4" stroke="#fff" stroke-width="1.6"/></symbol>
+ <symbol id="source-msedge" viewBox="0 0 24 24"><path d="M22 14c-2 7-14 9-19 2C-2 8 5 0 13 1c6 0 10 5 10 10-1-5-6-6-9-3-2 2-1 5 2 5 2 0 4 0 6 1z" fill="#087bce"/><path d="M2 14C-1 7 5 0 13 1c6 0 10 5 10 10-1-5-6-6-9-3-4 4-1 8 5 8-6 5-15 1-12-5-4 0-4 2-5 3z" fill="#20bfad"/><path d="M7 11c-3 6 6 10 12 5-6 6-15 2-12-5z" fill="#075ca8"/></symbol>
+ <symbol id="source-sistema" viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z" fill="#526071"/><path d="M16 8c3 2 3 6 0 8m3-11c5 4 5 10 0 14" fill="none" stroke="#526071" stroke-width="1.8" stroke-linecap="round"/></symbol>
+ <symbol id="source-app" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="17" rx="3" fill="none" stroke="#0b93ac" stroke-width="1.8"/><path d="M3 8h18M7 13h3l4-3v8l-4-3H7z" fill="#0b93ac"/></symbol>
+</defs></svg>
 <svg class="ornaments" viewBox="0 0 1440 900" preserveAspectRatio="none" aria-hidden="true">
  <path class="warm" d="M-40 182 C 164 128, 264 236, 446 184 S 766 80, 1014 156 S 1290 258, 1490 184" fill="none"/>
  <path class="wine" d="M942 70 C 1010 140, 1118 104, 1176 186 C 1226 258, 1162 338, 1254 406" fill="none"/>
@@ -612,22 +646,14 @@ PAGINA = """<!doctype html><html lang="es"><head><meta charset="utf-8">
 </svg>
 <header>
  <div class="brand">
-  <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true">
-   <defs><linearGradient id="cvLogoGrad" x1="8" y1="8" x2="56" y2="58" gradientUnits="userSpaceOnUse">
-    <stop offset="0" stop-color="#2BC9E9"/><stop offset=".48" stop-color="#ECC2FF"/><stop offset="1" stop-color="#F9E1C8"/>
-   </linearGradient></defs>
-   <rect x="7" y="7" width="50" height="50" rx="16" fill="url(#cvLogoGrad)"/>
-   <path d="M18 39c5-5 13-5 18 0 3-3 7-4 11-3v7c-4-1-8 0-11 3-5-4-13-4-18 0z" fill="rgba(255,255,255,.72)"/>
-   <path d="M19 24h8m-8 6h13M38 18v16m6-12v8m-12-5v12" stroke="#172033" stroke-width="2.7" stroke-linecap="round"/>
-   <path d="M17 44c7-5 15-5 22 0" stroke="#172033" stroke-width="2.3" stroke-linecap="round" fill="none"/>
-  </svg>
+  <img class="brand-mark" src="/assets/claseviva.png" alt="" width="46" height="46" decoding="async">
   <span class="logo-text"><span class="logo-word">ClaseViva</span><small>estudio en vivo con IA</small></span>
  </div>
   <div class="chips">
    <span class="chip status">Estado <b id="estado">...</b></span>
-   <span class="chip timechip">Sesión total <b id="tiempo_pared">-</b></span>
-   <span class="chip timechip">Captura útil <b id="duracion">-</b></span>
-   <span class="chip timechip">Pausa <b id="tiempo_pausa">-</b></span>
+   <span class="chip timechip" title="Tiempo transcurrido desde Inicio, incluidas las pausas. Se detiene al finalizar.">Sesión total <b id="tiempo_pared">-</b></span>
+   <span class="chip timechip" title="Tiempo grabado útil: se detiene en pausa manual y automática. Los resúmenes usan este reloj.">Captura útil <b id="duracion">-</b></span>
+   <span class="chip timechip" title="Tiempo de la sesión que no se está grabando.">Pausa <b id="tiempo_pausa">-</b></span>
    <span class="chip timechip">Transcrito hasta <b id="transcrito_hasta">-</b></span>
    <span class="chip timechip">Retraso STT <b id="retraso_stt">-</b></span>
    <span class="chip timechip" id="chipvideo" style="display:none">Video equivalente <b id="tiempo_video">-</b></span>
@@ -637,7 +663,7 @@ PAGINA = """<!doctype html><html lang="es"><head><meta charset="utf-8">
    <span class="chip">Audio estado <b id="audioestado">-</b></span>
    <span class="chip">STT <b id="sttestado">-</b></span>
    <span class="chip alerta" id="chiphijos" style="display:none">Procesos <b id="hijos"></b></span>
-  <span class="chip" id="chipcosto"><span id="costolabel">Gasto API</span> <b id="costo">Sesión $0 · Curso $0</b></span>
+  <span class="chip" id="chipcosto"><span id="costolabel">Gasto estimado</span> <b id="costo">Sesión $0 · Curso $0</b></span>
  </div>
  <div class="header-actions"><button id="bcerrar" class="rojo" style="display:none"
    onclick="if(confirm('¿Cerrar la aplicación completa? Si hay clase activa se finalizará.'))cerrarApp()">Cerrar app</button></div>
@@ -661,21 +687,23 @@ PAGINA = """<!doctype html><html lang="es"><head><meta charset="utf-8">
     <div class="field span3"><label>Tema</label><input id="itema" placeholder="tema de la clase"></div>
     <div class="field span4"><label>Pantalla</label><select id="imon"></select></div>
     <button id="startRefreshSources" class="gris span2" type="button"
-      onclick="refreshSources(this)">Actualizar pantallas</button>
-    <div class="field span2"><label>Audio</label><select id="ifuente"><option value="chrome">Chrome</option>
-      <option value="msedge">Edge</option><option value="sistema">Todo el sistema</option></select></div>
+      onclick="refreshSources(this)"><span class="source-refresh-icons" aria-hidden="true"><svg class="source-icon"><use href="#source-app"/></svg></span>Actualizar fuentes</button>
+    <div class="field span3"><label for="ifuente">Audio</label><div class="source-select"><svg class="source-icon" aria-hidden="true"><use id="ifuenteIcon" href="#source-sistema"/></svg><select id="ifuente" onchange="updateSourceIcon('ifuente')">
+      <option value="sistema">Todo el sistema</option></select></div></div>
     <div class="field span4"><label>Salida fallback (mezcla sistema)</label><select id="idispositivo"></select></div>
     <div class="field span3"><label>Transcripción</label><select id="isttbackend" onchange="sttBackendChanged()">
       <option value="remote">Remota · failover automático</option></select></div>
-     <label class="webtoggle span5" id="sttConsentLabel"><input id="isttconsent" type="checkbox">
+     <p id="startAudioSourcesStatus" class="source-status span12" role="status" aria-live="polite"></p>
+     <label class="webtoggle start-consent" id="sttConsentLabel"><input id="isttconsent" type="checkbox">
       Autorizo enviar WAV sellados a AssemblyAI, Deepgram, Speechmatics o Groq</label>
-     <button class="verde span2" onclick="iniciarClase(this)">Empezar</button>
+     <button class="verde start-submit" onclick="iniciarClase(this)">Empezar</button>
      <div id="contentAdmin" class="content-admin span12">
       <span class="nota">Administrar grabaciones · el movimiento es reversible desde la Papelera.</span>
       <button id="deleteClassButton" class="gris" type="button" onclick="deleteRecordedContent('class',this)">Mover clase a Papelera</button>
       <button id="deleteCourseButton" class="rojo" type="button" onclick="deleteRecordedContent('course',this)">Mover curso a Papelera</button>
      </div>
     </div>
+   <details class="setup-help"><summary>Configuración y fuentes de audio</summary><p>Edita el archivo .env junto al ejecutable y reinicia para configurar las claves de DeepSeek y los proveedores de transcripción. Las claves no se muestran en este panel.</p><p>La lista incluye navegadores y aplicaciones de llamadas abiertas, además de cualquier programa con una sesión de sonido. Si no aparece tu aplicación, reproduce audio y pulsa Actualizar fuentes. Selecciona Microsoft Edge para el navegador Edge; los motores WebView de otras aplicaciones se agrupan con su programa. Si cierras una aplicación, actualiza y selecciónala de nuevo al abrirla.</p></details>
    <div id="imsg" class="message"></div>
   </section>
   <section class="panel panel-live"><div class="section-head"><h3><svg class="ico teal" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h3l2-5 4 10 3-7 2 2h4"/></svg>Estado de evidencia</h3><span class="panel-kicker">audio sellado → STT canónico</span></div>
@@ -700,7 +728,7 @@ PAGINA = """<!doctype html><html lang="es"><head><meta charset="utf-8">
      <button class="gris" type="button" onclick="scrollContent('leccion','end')">Último tramo</button>
     </span>
    </div>
-   <div id="leccion" class="lesson-body md">(sin clase activa)</div>
+   <div id="leccion" class="lesson-body md" tabindex="0" aria-label="Resumen y lección en vivo">(sin clase activa)</div>
   </section>
  </div>
  <div class="stack side">
@@ -721,16 +749,18 @@ PAGINA = """<!doctype html><html lang="es"><head><meta charset="utf-8">
     <button id="btnCompactDry" class="gris controlwide action-wide" style="display:none" onclick="compactDry(this)">Compactar clase (dry-run)</button>
     <div class="field"><label>Velocidad</label><select id="selv" onchange="cmd('velocidad '+this.value,this)">
      <option>1</option><option>1.25</option><option>1.5</option><option>1.75</option><option>2</option></select></div>
-    <div class="field"><label>Fuente</label><select id="self" onchange="cmd('fuente '+this.value,this)">
-     <option>chrome</option><option>msedge</option><option>sistema</option></select></div>
+    <div class="field audio-source-field"><label for="self">Fuente de audio</label><div class="source-select"><svg class="source-icon" aria-hidden="true"><use id="selfIcon" href="#source-sistema"/></svg><select id="self" onchange="updateSourceIcon('self');cmd('fuente '+this.value,this)">
+     <option value="sistema">Todo el sistema</option></select></div></div>
     <div class="field controlwide fallback-device"><label>Salida fallback (mezcla sistema)</label><select id="seld" onchange="cmd('dispositivo '+this.value,this)"></select></div>
     <div class="field controlwide screen-field"><label>Pantalla</label><select id="selm" onchange="cmd('monitor '+this.value,this)"></select></div>
     <button id="refreshSources" class="controlwide gris" type="button"
-      onclick="refreshSources(this)">Actualizar pantallas</button>
+      onclick="refreshSources(this)"><span class="source-refresh-icons" aria-hidden="true"><svg class="source-icon"><use href="#source-app"/></svg></span>Actualizar fuentes</button>
     <button class="controlwide gris fallback-btn" onclick="cmd('enfoque '+(document.getElementById('enf').textContent=='ON'?'off':'on'),this)">Silenciar otras apps (fallback)</button>
     <button id="btnRegion" class="controlwide gris region-btn" onclick="abrirRegion(this)">Región</button>
-    <div class="nota controlwide">Ruta ideal: Chrome/Edge EXCLUSIVO POR PID. Si ves FALLBACK SALIDA SISTEMA, se esta usando la mezcla del dispositivo elegido; "Silenciar otras apps" solo ayuda en esa ruta.</div>
+    <div class="nota controlwide">La captura por aplicación incluye sus procesos hijos. Si la ruta indica mezcla del sistema, también pueden grabarse otras aplicaciones; "Silenciar otras apps" ayuda en esa ruta.</div>
    </div>
+   <p id="audioSourcesStatus" class="source-status" role="status" aria-live="polite"></p>
+   <p class="source-help">Sesión total incluye pausas; Captura útil se detiene al pausar y marca los resúmenes. Todo el sistema incluye el audio de otras apps.</p>
   </section>
   <section id="secpost" class="panel" style="display:none"><div class="section-head"><h3><svg class="ico teal" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l4 4L19 6"/><path d="M5 20h14"/></svg>Post-proceso</h3><span class="panel-kicker">consolidación</span></div><div id="legacyWarning" class="audio-warning" style="display:none"></div><div id="evidenciaInfo" class="nota"></div><div id="poststate" class="post-state">Listo para consolidar al finalizar la clase.</div><div id="postlog"></div></section>
   <section class="panel panel-capture"><div class="section-head"><h3><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="12" rx="2"/><path d="M8 21h8M12 17v4"/></svg>Última captura</h3><span class="panel-kicker">cambia con la pantalla</span></div>
@@ -738,12 +768,13 @@ PAGINA = """<!doctype html><html lang="es"><head><meta charset="utf-8">
    <div id="capdate" class="nota"></div>
    <div id="sincap" class="empty">(aún sin capturas)</div></section>
   <section class="panel panel-copilot"><div class="section-head"><h3><svg class="ico wine" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14v10H8l-3 3z"/><path d="M9 10h6M9 13h4"/></svg>Copiloto</h3><span class="panel-kicker">pregunta, captura o web</span></div><div id="chat"></div>
+   <div class="chat-reading-controls"><button class="gris" type="button" aria-controls="chat" aria-expanded="false" onclick="const c=document.getElementById('chat');const open=c.classList.toggle('expanded');this.setAttribute('aria-expanded',String(open));this.textContent=open?'Vista compacta':'Ampliar respuestas'">Ampliar respuestas</button><small>Pregunta arriba; lee la respuesta desde su inicio abajo.</small></div>
    <div class="chatbar">
     <textarea id="preg" rows="1" placeholder="Pregunta sobre la clase..." oninput="autoresizePregunta()" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();enviarPregunta(null)}"></textarea>
-    <button onclick="enviarPregunta(this)">Enviar</button>
+    <button id="btnPregunta" onclick="enviarPregunta(this)">Enviar</button>
     <button class="gris" title="Congelar captura para la próxima pregunta" onclick="capturarPantalla(this)">Captura + pregunta</button>
    </div>
-   <label class="webtoggle" title="Busca en la web (DuckDuckGo) y responde citando fuentes">
+   <label class="webtoggle" title="Busca en la web con una descarga HTTP y responde citando fuentes">
     <input type="checkbox" id="webchk"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg><span>Web</span></label>
    <div id="cap_previa" class="previa" style="display:none"></div>
   </section>
@@ -808,9 +839,12 @@ PAGINA = """<!doctype html><html lang="es"><head><meta charset="utf-8">
  </div>
 </div>
 <div id="toast"></div>
+<script src="/assets/source_picker.js"></script>
 <script>
 let INFO=null;
+let AUDIO_SOURCES=[];
 let CAPTURA=null;
+let COPILOTO_EN_CURSO=false;
 let SESION_VISUAL=false;
 let LAST_STATE=null;
 let FAST_REFRESH_TIMER=null;
@@ -883,6 +917,7 @@ function formatElapsed(seconds){
  const s=String(total%60).padStart(2,'0');return h+':'+m+':'+s;
 }
 function anclarRelojLocal(state){
+ if(!state.clase_id||state.estado_efectivo==='sin_clase'){CLOCK_ANCHOR=null;return;}
  CLOCK_ANCHOR={at:performance.now(),estado_efectivo:state.estado_efectivo||'',
   elapsed_wall_sec:Number(state.elapsed_wall_sec)||0,
   recorded_elapsed_sec:Number(state.recorded_elapsed_sec)||0,
@@ -1056,7 +1091,7 @@ async function refrescar(force){
  const visorSinClase=(!s.modo_app&&sinClaseReal);
  const campos={estado:s.post_titulo||s.estado+(s.auto_pausa?' silencio':''),parte:s.parte,
    curso:s.curso||'-',tema:s.tema||'-',tema_focus:s.tema||'(sin tema activo)',
-   fuente:s.fuente,amodo:s.audio_ruta||s.audio_modo||'-',monitor_audio:s.audio_ruta_detalle||s.fuente_audio||s.audio_modo||s.fuente||'-',
+   fuente:s.fuente_nombre||s.fuente,amodo:s.audio_ruta||s.audio_modo||'-',monitor_audio:s.audio_ruta_detalle||s.fuente_audio||s.audio_modo||s.fuente||'-',
    audioestado:s.audio_state_label||'-',sttestado:s.stt_state_label||'-',
    vel:(s.velocidad=='-'?'-':s.velocidad+'x'),monitor_chip:s.monitor?('P'+s.monitor):'-',
    enf:s.enfoque?'ON':'off',nseg:s.segmentos,costo:s.costo_display||('$'+s.costo),
@@ -1115,7 +1150,14 @@ async function refrescar(force){
     cursoEl,s.curso_html||'(aún sin bitácora)','course',s.curso||'');
   }
  }
- document.getElementById('selv').value=s.velocidad;document.getElementById('self').value=s.fuente;
+ document.getElementById('selv').value=s.velocidad;
+ if(s.fuente&&s.fuente!=='-'){
+  const select=document.getElementById('self');
+  if(![...select.options].some(o=>o.value===s.fuente)){
+   const option=document.createElement('option');option.value=s.fuente;
+   option.textContent=s.fuente_nombre||s.fuente;select.appendChild(option)}
+  select.value=s.fuente;updateSourceIcon('self');
+ }
   const selm=document.getElementById('selm');
   if(s.monitores)fillSourceSelect('selm',s.monitores,'idx','etiqueta',s.monitor);
   if(s.monitor&&selm.value!=s.monitor)selm.value=s.monitor;
@@ -1164,6 +1206,44 @@ function fillSourceSelect(id,items,key,label,preferred){
  }
  if(wanted&&[...select.options].some(option=>option.value===wanted))select.value=wanted;
 }
+function updateSourceIcon(id){
+ const select=document.getElementById(id),icon=document.getElementById(id+'Icon');
+ if(!select||!icon)return;
+ const source=AUDIO_SOURCES.find(source=>source.id===select.value);
+ const key=source&&source.icono?source.icono:['chrome','msedge','sistema'].includes(select.value)?select.value:'app';
+ icon.setAttribute('href','#source-'+key);
+ updateAudioSourceStatus(id);
+ if(typeof syncSourcePicker==='function')syncSourcePicker(id);
+}
+function updateAudioSourceStatus(id){
+ const select=document.getElementById(id);
+ const root=document.getElementById(id==='ifuente'?'startAudioSourcesStatus':'audioSourcesStatus');
+ if(!select||!root)return;
+ const source=AUDIO_SOURCES.find(source=>source.id===select.value)||
+  (['chrome','msedge'].includes(select.value)?AUDIO_SOURCES.find(source=>source.icono===select.value):null);
+ const system=select.value==='sistema';
+ const dot=document.createElement('span');dot.className='source-status-dot';dot.setAttribute('aria-hidden','true');
+ const name=document.createElement('strong');name.textContent=source?(source.aplicacion||source.etiqueta):
+  system?'Todo el sistema':(select.selectedOptions[0]?.textContent||'Selecciona una aplicación');
+ const detail=document.createElement('span');detail.className='source-status-detail';
+ detail.textContent=system?'Se capturan todos los sonidos de la salida elegida.':
+  source?source.detalle:'Esta fuente no está disponible. Actualiza y selecciona una aplicación.';
+ root.dataset.state=system?'system':!source?'missing':source.silenciada?'muted':source.senal_detectada?'signal':'ready';
+ root.title=source&&source.pid?'PID '+source.pid:'';
+ root.replaceChildren(dot,name,detail);
+}
+function renderAudioSources(sources){
+ if(!Array.isArray(sources))return;
+ AUDIO_SOURCES=sources;
+ const rows=sources.map(source=>({id:source.id,etiqueta:source.etiqueta}));
+ for(const id of ['ifuente','self']){
+  const select=document.getElementById(id),wanted=select.value;
+  const items=[...rows];
+  if(wanted&&!items.some(row=>row.id===wanted)){
+   const label=select.selectedOptions[0].textContent.replace(' (sin detectar)','');
+   items.push({id:wanted,etiqueta:label+' (sin detectar)'})}
+  fillSourceSelect(id,items,'id','etiqueta',wanted);updateSourceIcon(id)}
+}
 async function refreshSources(button){return runBusy(button,'Actualizando...',async()=>{try{
  const data=await api('/api/recargar_fuentes',{});
  const selectedMonitor=(LAST_STATE&&LAST_STATE.monitor)||document.getElementById('selm').value;
@@ -1172,6 +1252,7 @@ async function refreshSources(button){return runBusy(button,'Actualizando...',as
  fillSourceSelect('selm',data.monitores,'idx','etiqueta',selectedMonitor);
  fillSourceSelect('idispositivo',data.dispositivos,'id','etiqueta',document.getElementById('idispositivo').value);
  fillSourceSelect('seld',data.dispositivos,'id','etiqueta',selectedDevice);
+ renderAudioSources(data.fuentes_audio);
  if(INFO){INFO.monitores=data.monitores;INFO.dispositivos=data.dispositivos}
  toast(data.msg||'Fuentes actualizadas');
  }catch(e){toast('No se pudieron actualizar las fuentes: '+e.message,true)}})}
@@ -1182,6 +1263,7 @@ async function cargarInfo(force){try{if(INFO&&!force)return;INFO=await api('/api
  const nuevo=document.createElement('option');nuevo.value='__nuevo__';nuevo.textContent='curso nuevo...';c.appendChild(nuevo);
   fillSourceSelect('imon',INFO.monitores,'idx','etiqueta');
   fillSourceSelect('idispositivo',INFO.dispositivos,'id','etiqueta');
+ renderAudioSources(INFO.fuentes_audio);
  const backend=document.getElementById('isttbackend');if(backend&&INFO.stt_backend)backend.value=INFO.stt_backend;
  const consent=document.getElementById('isttconsent');
  if(consent&&INFO.stt_remote_consent_default!==undefined)consent.checked=!!INFO.stt_remote_consent_default;
@@ -1273,22 +1355,32 @@ function resetPregunta(){
  const bar=i.closest('.chatbar');if(bar)bar.classList.remove('is-expanded');
 }
 async function enviarPregunta(el){
+ if(COPILOTO_EN_CURSO)return;
  const i=document.getElementById('preg');const q=i?i.value:'';
- await preguntar(q,el);resetPregunta();
+ if(!q.trim()&&!CAPTURA)return;
+ resetPregunta();await preguntar(q,el);
 }
-async function preguntar(q,el){q=(q||'').trim();if(!q&&!CAPTURA)return;return runBusy(el,'Pensando...',async()=>{const ch=document.getElementById('chat');
+async function preguntar(q,el){q=(q||'').trim();if(COPILOTO_EN_CURSO||(!q&&!CAPTURA))return;
+ COPILOTO_EN_CURSO=true;
+ const send=document.getElementById('btnPregunta');setBusy(send,true,'Pensando...');
+ try{return await runBusy(el===send?null:el,'Pensando...',async()=>{const ch=document.getElementById('chat');
  const cap=CAPTURA;CAPTURA=null;const preview=document.getElementById('cap_previa');
  preview.replaceChildren();preview.style.display='none';
- ch.innerHTML+='<div class="q">'+(cap?'<img class="cap" src="/img/'+cap+'">':'')+
-  esc(q||'Explica la captura')+'</div><div class="a md">pensando...</div>';
- ch.scrollTop=ch.scrollHeight;
+ const question=document.createElement('div');question.className='q';
+ question.innerHTML=(cap?'<img class="cap" src="/img/'+esc(cap)+'">':'')+esc(q||'Explica la captura');
+ const answer=document.createElement('div');answer.className='a md';answer.textContent='Pensando...';
+ answer.setAttribute('aria-busy','true');ch.append(question,answer);
+ ch.scrollTop=question.offsetTop;
  try{const s=await api('/api/pregunta',{q:q,captura:cap||'',
-   web:document.getElementById('webchk').checked},120000);
+   web:document.getElementById('webchk').checked,
+   request_id:crypto.randomUUID()},120000);
   if(s.ok===false)throw new Error(s.respuesta||s.msg||'error del copiloto');
-  ch.lastElementChild.innerHTML=s.respuesta_html||esc(s.respuesta);
-  decorateMarkdown(ch.lastElementChild)}
- catch(e){ch.lastElementChild.textContent='error: '+e}
- ch.scrollTop=ch.scrollHeight})}
+  answer.innerHTML=s.respuesta_html||esc(s.respuesta);
+  decorateMarkdown(answer)}
+ catch(e){answer.textContent='error: '+e}
+ answer.setAttribute('aria-busy','false');
+ if(ch.lastElementChild===answer)ch.scrollTop=question.offsetTop})}
+ finally{COPILOTO_EN_CURSO=false;setBusy(send,false)}}
 async function descartarCapturaPrevia(silent){
  const nombre=CAPTURA;if(!nombre)return;
  try{await api('/api/captura_previa/descartar',{captura:nombre});CAPTURA=null;
@@ -1568,7 +1660,8 @@ document.getElementById('studentNotePasteZone').addEventListener('paste',async e
    'paste_image','paste',null)}}});
 let RS=null;
 async function abrirRegion(el){return runBusy(el,'Abriendo...',async()=>{try{const s=await api('/api/region_shot',{},30000);
- document.getElementById('rimg').src='/img/'+s.captura;
+ if(!s.ok)throw new Error(s.msg);
+ document.getElementById('rimg').src=s.captura;
  document.getElementById('rov').style.display='flex';toast('arrastra sobre el video del profesor')}
  catch(e){toast('no pude capturar: '+e,true)}})}
 function rdown(e){const r=document.getElementById('rimg').getBoundingClientRect();
@@ -1587,6 +1680,7 @@ async function rup(e){if(!RS)return;const im=document.getElementById('rimg');
  if(sel.w<40||sel.h<40){toast('selección muy pequeña; intenta de nuevo',true);return}
  try{const s=await api('/api/region',sel);toast(s.msg,!s.ok);cerrarRegion()}catch(e){toast(''+e,true)}}
 function cerrarRegion(){document.getElementById('rov').style.display='none';
+ document.getElementById('rimg').removeAttribute('src');
  document.getElementById('rbox').style.display='none';RS=null}
 async function quitarRegion(){try{const s=await api('/api/region',{quitar:1});toast(s.msg,!s.ok);
  cerrarRegion()}catch(e){toast(''+e,true)}}
@@ -1638,6 +1732,14 @@ def _dispositivos(refresh: bool = False) -> list[dict]:
             except Exception:
                 _DISPOSITIVOS = []
         return list(_DISPOSITIVOS)
+
+
+def _fuentes_audio_disponibles() -> list[dict]:
+    """Aplicaciones abiertas con sesión de salida o ventana visible, agrupadas por PID."""
+    fuentes = audio_sesiones.aplicaciones_audio()
+    fuentes.append({"id": "sistema", "etiqueta": "Todo el sistema", "icono": "sistema",
+                    "detalle": "mezcla de la salida seleccionada; incluye otras apps"})
+    return fuentes
 
 
 def _fmt_abs(epoch: float | None) -> str:
@@ -1704,15 +1806,29 @@ def clasificar_estado_audio(
     sin_valido = _numero_no_negativo(health.get("seconds_without_valid_audio"))
     timeout = max(1.0, _numero_no_negativo(
         health.get("no_valid_audio_timeout"), 60.0))
+    fallback_lectura = (
+        capture_phase in {"trying_device_fallback", "reading_device"}
+        and str(st.get("fuente") or "sistema") != "sistema")
+    # Cada WAV publica una fase "trying" antes de leer. No confundir la
+    # siguiente lectura del MISMO stream validado con intentar otra ruta.
+    misma_ruta_validada = bool(
+        fallback_lectura and health.get("stream_id")
+        and health.get("stream_id") == st.get("audio_capture_stream_id")
+        and health.get("mode") == st.get("audio_capture_mode")
+        and str(health.get("mode") or "").startswith(
+            str(st.get("fuente") or "sistema") + ":")
+        and ultimo_resultado in {"valid", "silence"})
 
     if efectivo == "finalizado":
         phase = "closed"
-    elif efectivo == "audio_requires_attention":
+    elif efectivo == "audio_requires_attention" or capture_phase == "source_closed":
         phase = "requires_attention"
     elif efectivo == "pausado_manual":
         phase = "manual_paused"
     elif efectivo == "auto_pausado":
         phase = "auto_paused"
+    elif misma_ruta_validada:
+        phase = "active" if ultimo_resultado == "valid" else "silent"
     elif "fallback" in capture_phase or (
             capture_phase in {"trying_device", "reading_device"}
             and str(st.get("fuente") or "sistema") != "sistema"):
@@ -1749,6 +1865,11 @@ def clasificar_estado_audio(
         "closed": "Audio cerrado",
         "no_valid_wav": "Audio sin WAV válido",
     }
+    modo = str(st.get("audio_capture_mode") or st.get("audio_modo") or "")
+    es_mezcla = (str(st.get("fuente") or "sistema") != "sistema"
+                 and (":dispositivo" in modo or ":fallback" in modo))
+    if phase == "active" and es_mezcla:
+        labels["active"] = "Audio activo · mezcla del sistema"
     code = (
         "no_valid_wav"
         if evidence == "no_valid_wav"
@@ -1763,6 +1884,8 @@ def clasificar_estado_audio(
         detalle_partes.append(f"{wavs} WAV válido(s)")
     if health.get("route"):
         detalle_partes.append(f"ruta={health['route']}")
+    if es_mezcla:
+        detalle_partes.append("incluye sonidos de otras aplicaciones; no es audio exclusivo")
     return {
         "code": code,
         "phase": phase,
@@ -2117,13 +2240,26 @@ def _costos_curso(curso: str, ahora: float, clase_actual: Path | None = None) ->
 
 
 def _leccion_final_info(d: Path) -> dict:
+    from . import consolidation_recovery
+
+    saved = consolidation_recovery.read_status(d)
+    publication_error = str(saved.get("error") or "") if saved.get("status") == "error" else ""
+    if saved.get("running") and not _POST_CORRIENDO:
+        publication_error = (
+            "La consolidación anterior aún no tiene un cierre confirmado. "
+            "Vuelve a pulsar Consolidar para retomar el trabajo pendiente.")
+    publication = {
+        "publication_error": publication_error,
+        "cleanup_status": saved.get("cleanup_status", ""),
+        "cleanup_message": str(saved.get("cleanup_message") or ""),
+    }
     final = d / "leccion_final.md"
     if not final.is_file():
-        return {"existe": False, "actualizada": False, "mtime": 0.0, "nuevas": []}
+        return {**publication, "existe": False, "actualizada": False, "mtime": 0.0, "nuevas": []}
     try:
         mtime = final.stat().st_mtime
     except OSError:
-        return {"existe": False, "actualizada": False, "mtime": 0.0, "nuevas": []}
+        return {**publication, "existe": False, "actualizada": False, "mtime": 0.0, "nuevas": []}
     fuentes = [
         d / "transcript.jsonl",
         d / "leccion_en_vivo.md",
@@ -2138,7 +2274,8 @@ def _leccion_final_info(d: Path) -> dict:
                 nuevas.append(p.name)
         except OSError:
             continue
-    return {"existe": True, "actualizada": not nuevas, "mtime": mtime, "nuevas": nuevas}
+    return {**publication, "existe": True, "actualizada": not nuevas and not publication_error,
+            "mtime": mtime, "nuevas": nuevas}
 
 
 def _estado_operativo(st: dict, final_info: dict) -> dict:
@@ -2149,22 +2286,25 @@ def _estado_operativo(st: dict, final_info: dict) -> dict:
             "titulo": "Consolidando…",
             "detalle": "El post-proceso está generando la lección final.",
         }
-    if _POST_ERROR:
+    publication_error = (
+        _POST_ERROR or final_info.get("publication_error")
+        if efectivo == "finalizado" else "")
+    if publication_error:
         return {
             "clave": "error",
             "titulo": "Error al consolidar",
-            "detalle": _POST_ERROR,
+            "detalle": publication_error,
         }
     if efectivo == "finalizado":
         if final_info.get("actualizada"):
             return {
                 "clave": "consolidada",
                 "titulo": "Lección consolidada",
-                "detalle": "La lección final está lista y actualizada.",
+                "detalle": final_info.get("cleanup_message") or "La lección final está lista y actualizada.",
             }
         return {
             "clave": "pendiente",
-            "titulo": "Finalizada — pendiente de consolidar",
+            "titulo": "Lista para consolidar",
             "detalle": "Consolida para crear o actualizar leccion_final.md.",
         }
     if efectivo == "pausado_manual":
@@ -2328,11 +2468,17 @@ def _consolidation_gate(d: Path, st: dict, *,
         if stt_status is None:
             stt_status = _panel_stt_status(d, verify_files=True)
         barrier = _panel_completion_barrier(d, stt_status)
+    recoverable = bool(barrier.get("capture_ready")
+                       and not barrier.get("missing_audio_chunk_count")
+                       and not barrier.get("invalid_stt_count"))
+    ready = bool(barrier.get("ready") or recoverable)
+    recovery_pending = ready and not barrier.get("stt_ready", True)
     return {
-        "ready": bool(barrier.get("ready")),
-        "shutdown_blocking": not bool(barrier.get("ready")),
-        "status": str(barrier.get("status") or ""),
-        "warnings": list(barrier.get("warnings") or []),
+        "ready": ready,
+        "shutdown_blocking": not ready,
+        "status": "ready_to_recover_stt" if recovery_pending else str(barrier.get("status") or ""),
+        "warnings": [*list(barrier.get("warnings") or []),
+                     *([f"stt_pending={barrier.get('pending_stt_count', 0)}"] if recovery_pending else [])],
         "reasons": list(
             barrier.get("blocking_reasons")
             if barrier.get("blocking_reasons") is not None
@@ -2475,13 +2621,13 @@ def clasificar_salida_hijo(
 
 
 def _spawn(mod: str, intentos: int = 0, *, force_cpu: bool = False) -> dict:
+    from .app_paths import worker_command, resource_root
+
     entorno = _entorno_hijo(mod, force_cpu=force_cpu)
-    py_venv = config.ROOT / ".venv" / "Scripts" / "python.exe"
-    py = str(py_venv) if py_venv.is_file() else \
-        sys.executable.replace("pythonw.exe", "python.exe")
+    entorno["CLASEVIVA_DATA_DIR"] = str(config.ROOT)
     lg = open(config.LOGS_DIR / f"{mod.split('.')[-1]}.log", "a", encoding="utf-8")
     try:
-        p = subprocess.Popen([py, "-m", mod], cwd=str(config.ROOT), stdout=lg,
+        p = subprocess.Popen(worker_command(mod), cwd=str(resource_root()), stdout=lg,
                              stderr=subprocess.STDOUT, env=entorno,
                              creationflags=subprocess.CREATE_NO_WINDOW)
     finally:
@@ -2788,10 +2934,48 @@ def inicio():
     return PAGINA
 
 
-def _pagina_leccion_html(markdown_texto: str) -> str:
+@app.get("/api/healthz")
+def api_healthz():
+    """Identidad sin consultar cursos, estado, dispositivos ni credenciales."""
+    from . import app_paths
+
+    return jsonify({"app": "ClaseViva", "version": 1,
+                    "consolidation_recovery": 1,
+                    "data_root_id": app_paths.data_root_id(config.ROOT)})
+
+
+@app.get("/favicon.ico")
+def favicon():
+    return send_from_directory(config.RESOURCE_DIR / "assets", "claseviva.ico")
+
+
+@app.get("/assets/<filename>")
+def panel_asset(filename: str):
+    # Lista cerrada: nunca servir .env, datos ni rutas elegidas por el cliente.
+    if filename not in {"claseviva.png", "claseviva.ico", "source_picker.js"}:
+        return "Recurso no disponible", 404
+    return send_from_directory(config.RESOURCE_DIR / "assets", filename)
+
+
+@app.get("/api/iconos-app/<key>.png")
+def app_icon(key: str):
+    from . import app_icons
+
+    path = app_icons.icon_file(key)
+    if path is None:
+        return "", 404, {"Cache-Control": "no-store"}
+    response = send_file(path, mimetype="image/png", max_age=31536000, conditional=True)
+    response.headers["Cache-Control"] = "private, max-age=31536000, immutable"
+    return response
+
+
+def _pagina_leccion_html(markdown_texto: str, *, standalone: bool = False) -> str:
     titulo_match = re.search(r"(?m)^#\s+(.+)$", str(markdown_texto or ""))
     titulo = titulo_match.group(1).strip() if titulo_match else "Lección final"
     cuerpo = a_html(markdown_texto)
+    nav = ('<span>Documento autocontenido · lectura sin conexión</span>' if standalone
+           else '<a href="/leccion_final.html">Descargar HTML con imágenes</a> '
+                '<a href="/leccion_final.md">Ver Markdown</a>')
     return f"""<!doctype html>
 <html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -2837,7 +3021,7 @@ h2{{font-size:1.45rem}}}}
 @media print{{.top{{display:none}}body{{background:#fff}}article{{box-shadow:none;border:0;padding:0}}
 details{{display:block}}details>summary{{display:none}}}}
 </style></head><body><header class="top"><span class="brand">ClaseViva · modo estudio</span>
-<a href="/leccion_final.md">Ver Markdown</a></header><main><article>{cuerpo}</article></main></body></html>"""
+{nav}</header><main><article>{cuerpo}</article></main></body></html>"""
 
 
 @app.get("/leccion_final")
@@ -2858,6 +3042,19 @@ def ver_leccion_final_markdown():
     return send_from_directory(d, "leccion_final.md",
                                mimetype="text/markdown; charset=utf-8",
                                as_attachment=False)
+
+
+@app.get("/leccion_final.html")
+def descargar_leccion_autocontenida():
+    d = _clase()
+    if d is None or not (d / "leccion_final.md").is_file():
+        return "Lección final no disponible.", 404
+    from io import BytesIO
+    from .lesson_export import render_html
+    # La copia para compartir se genera en memoria; el paquete guardado sigue ligero.
+    page = render_html(d, self_contained=True).encode("utf-8")
+    return send_file(BytesIO(page), mimetype="text/html", as_attachment=True,
+                     download_name="leccion_final.html")
 
 
 def _cursos_inicio() -> list[str]:
@@ -2945,6 +3142,7 @@ def api_inicio_info():
                     "recovered_deletions": recovered_deletions,
                     "clases": clases, "monitores": _monitores(),
                     "dispositivos": _dispositivos(),
+                    "fuentes_audio": _fuentes_audio_disponibles(),
                     "stt_backend": stt_backend.configured_backend(),
                     # Solo premarca la casilla en el navegador; el consentimiento
                     # sigue viajando en el POST y decidiéndose en el preflight.
@@ -3024,16 +3222,18 @@ def api_contenido_eliminar():
 
 @app.post("/api/recargar_fuentes")
 def api_recargar_fuentes():
-    """Reenumera monitores/salidas solo cuando el usuario lo solicita."""
+    """Reenumera pantallas, salidas y aplicaciones bajo acción explícita."""
     monitores = _monitores(refresh=True)
     dispositivos = _dispositivos(refresh=True)
+    fuentes_audio = _fuentes_audio_disponibles()
     return jsonify({
         "ok": True,
         "monitores": monitores,
         "dispositivos": dispositivos,
+        "fuentes_audio": fuentes_audio,
         "msg": (
             f"Fuentes actualizadas: {len(monitores)} pantalla(s) y "
-            f"{len(dispositivos)} salida(s)."
+            f"{len(dispositivos)} salida(s) y {len(fuentes_audio) - 1} aplicacion(es)."
         ),
     })
 
@@ -3052,6 +3252,9 @@ def api_iniciar():
 
 def _iniciar_interno():
     dd = request.get_json(silent=True) or {}
+    fuente = str(dd.get("fuente") or "sistema")
+    if not audio_sesiones.fuente_valida(fuente):
+        return jsonify({"ok": False, "msg": "La fuente de audio no está disponible. Actualiza las fuentes y selecciona una aplicación."}), 409
     activa = _clase()
     if activa is not None and est.leer_estado(activa)["estado"] != "fin" and HIJOS:
         return jsonify({"ok": False, "msg": "ya hay una clase corriendo"})
@@ -3093,7 +3296,6 @@ def _iniciar_interno():
     cambios = {}
     if str(dd.get("monitor", "")).isdigit():
         cambios["monitor"] = int(dd["monitor"])
-    fuente = dd.get("fuente", "sistema")
     cambios["fuente"] = fuente
     cambios["dispositivo"] = dd.get("dispositivo", "")
     cambios["audio_modo"] = ""
@@ -3148,7 +3350,7 @@ def api_estado():
                         "costo_sesion": "0.000",
                         "costo_clase": "0.000", "costo_curso": "0.000",
                         "costos_lecciones": [],
-                        "costo_etiqueta": "Gasto API",
+                        "costo_etiqueta": "Gasto estimado",
                         "costo_nota": ("Sin curso activo: los contadores de sesión y curso "
                                        "inician en cero."),
                         "leccion_html": "", "ticker": "", "trans_diag": "",
@@ -3209,6 +3411,7 @@ def api_estado():
     ahora = time.time()
     curso_actual = st.get("curso", est.curso_de(d))
     final_info = _leccion_final_info(d)
+    base["post_error"] = _POST_ERROR or final_info.get("publication_error", "")
     operativo = _estado_operativo(st, final_info)
     marcas = est.leer_marcas(d)
     metricas_tiempo = est.metricas_tiempo(st, marcas, ahora)
@@ -3230,8 +3433,20 @@ def api_estado():
     segmentos_total = int(stt_estado.get("segment_count") or 0)
     consolidation_gate = _consolidation_gate(
         d, st, stt_status=stt_estado)
-    if operativo["clave"] == "pendiente":
-        if consolidation_gate["ready"] and consolidation_gate["warnings"]:
+    if operativo["clave"] in {"pendiente", "consolidada"}:
+        if consolidation_gate["status"] == "ready_to_recover_stt":
+            pendientes_stt = consolidation_gate["barrier"]["pending_stt_count"]
+            operativo = {
+                "clave": "pendiente",
+                "titulo": "Lista para consolidar",
+                "detalle": (
+                    f"Grabación finalizada. Audios pendientes: {pendientes_stt}, "
+                    "guardados localmente. Pulsa Consolidar para "
+                    "procesarlos y generar la lección. Si una API falla, "
+                    "los audios se conservan para reintentar."),
+            }
+        elif (consolidation_gate["ready"] and consolidation_gate["warnings"]
+              and not final_info.get("cleanup_message")):
             operativo = {
                 **operativo,
                 "detalle": (
@@ -3243,7 +3458,7 @@ def api_estado():
                 "clave": "pendiente",
                 "titulo": "Finalizando evidencia",
                 "detalle": (
-                    "Esperando el cierre verificable de captura, WAV y STT "
+                    "Esperando el cierre verificable de captura y archivos WAV "
                     "antes de consolidar."),
             }
     audio_runtime = clasificar_estado_audio(
@@ -3312,7 +3527,7 @@ def api_estado():
     audio_warning = st.get("audio_warning", "")
     audio_diag = st.get("audio_diag", "")
     audio_hint = ""
-    if audio_warning and st.get("estado") in {"grabando", "pausado"} and st.get("fuente") in audio_sesiones.NAVEGADORES:
+    if audio_warning and st.get("estado") in {"grabando", "pausado"} and audio_sesiones.es_fuente_aplicacion(st.get("fuente", "sistema")):
         audio_hint = captura_audio.mensaje_video_pausado(st.get("fuente", "chrome"))
     if audio_warning:
         diag += f" · aviso audio: {audio_warning}"
@@ -3348,26 +3563,34 @@ def api_estado():
         "leccion_final_existe": final_info["existe"],
         "leccion_final_actualizada": final_info["actualizada"],
         "leccion_final_nuevas": final_info["nuevas"],
+        "cleanup_status": final_info.get("cleanup_status", ""),
         "post_estado": operativo["clave"],
         "post_titulo": operativo["titulo"],
         "post_mensaje": operativo["detalle"],
         "parte": st["parte"], "curso": curso_actual,
         "tema": st.get("nombre", d.name), "fuente": st.get("fuente", "sistema"),
+        "fuente_nombre": audio_sesiones.nombre_fuente(st.get("fuente", "sistema")),
         "audio_modo": st.get("audio_modo", "") or "-",
         "dispositivo": st.get("dispositivo", ""),
         "velocidad": vel, "enfoque": st.get("enfoque", False),
         "monitor": st.get("monitor") or config.MONITOR,
         "segmentos": segmentos_total,
         "costo": f"{costo_clase:.3f}",
-        "costo_display": f"Sesión ${costo_clase:.3f} · Curso ${costo_curso:.3f}",
+        "costo_display": (f"Sesión ${costo_clase:.3f} · Curso ${costo_curso:.3f}"
+                          + (" · parcial" if costos.get("costos_no_estimables") else "")),
         "costo_sesion": f"{costo_clase:.3f}",
         "costo_clase": f"{costo_clase:.3f}",
         "costo_curso": f"{costo_curso:.3f}",
         "costos_lecciones": costos["lecciones"],
-        "costo_etiqueta": "Gasto API",
-        "costo_nota": ("Sesión: gasto de esta clase. Curso: acumulado de sus clases. "
-                       "Los logs nuevos se atribuyen por curso/clase; los antiguos usan "
-                       "fallback por rango temporal."),
+        "costo_etiqueta": "Gasto estimado",
+        "costos_no_estimables": costos.get("costos_no_estimables", 0),
+        "costo_nota": (
+            "Estimación DeepSeek, no factura ni saldo STT. Sesión: esta clase; "
+            "curso: acumulado de sus clases. "
+            + (f"Hay {costos['costos_no_estimables']} llamada(s) sin tarifa conocida "
+               "que NO están sumadas. " if costos.get("costos_no_estimables") else "")
+            + ("Incluye registros históricos con estimación antigua, sin recalcular. "
+               if costos.get("costos_historicos_sin_tarifa") else "")),
         "leccion_html": vista_leccion_html,
         "fuente_audio": fuente_audio,
         "audio_ruta": audio_ruta,
@@ -3509,18 +3732,19 @@ def api_comando():
         except (ValueError, AssertionError):
             ok, msg = False, "velocidad inválida"
     elif palabra == "fuente":
-        if arg in ("chrome", "msedge", "sistema"):
+        if audio_sesiones.fuente_valida(arg):
             cambios_fuente = {
                 "fuente": arg,
                 "audio_modo": "",
                 "audio_warning": "",
                 "audio_diag": "",
+                "audio_capture_phase": "initializing",
             }
             if arg != st.get("fuente", "sistema"):
                 audio_sesiones.restaurar_enfoques()
                 cambios_fuente["enfoque"] = False
             est.actualizar_estado(d, **cambios_fuente)
-            msg = f"✅ fuente de audio: {arg}"
+            msg = f"✅ fuente de audio: {audio_sesiones.nombre_fuente(arg)}"
         else:
             ok, msg = False, "fuente inválida"
     elif palabra == "dispositivo":
@@ -3717,18 +3941,18 @@ def api_consolidar():
                 _post_log_append(
                     "ADVERTENCIA confirmada: 0 WAV validos y 0 segmentos de transcript; "
                     "la salida no se considera validacion de audio/STT.")
-            from . import post_procesar
+            from . import consolidation_recovery
             with contextlib.redirect_stdout(_EscritorLog()):
-                post_procesar.consolidar_todo(
-                    d,
-                    forzar=True,
-                    limpiar_al_final=paquete_ligero,
-                    paquete_ligero=paquete_ligero,
-                )
+                consolidation_recovery.consolidate(d, light=paquete_ligero, log=_post_log_append)
             _post_log_append("OK Leccion consolidada: leccion_final.md regenerada.")
             if paquete_ligero:
-                _post_log_append(
-                    "OK Clase cerrada como leccion_final.md + imágenes referenciadas.")
+                if (d / "session_state.json").exists() or (d / "audio").exists():
+                    _post_log_append(
+                        "ADVERTENCIA: lección publicada; limpieza retenida. "
+                        "Revisa el motivo de cobertura indicado en Post-proceso.")
+                else:
+                    _post_log_append(
+                        "OK Clase cerrada como leccion_final.md + HTML + imágenes referenciadas.")
             else:
                 _post_log_append("OK Evidencia conservada por solicitud explícita.")
         except Exception as e:
@@ -3819,17 +4043,41 @@ def api_pregunta():
         r = "escribe una pregunta o adjunta una captura"
         return jsonify({"ok": False, "respuesta": r, "respuesta_html": a_html(r)})
     usar_web = bool(dd.get("web"))
+    request_id = str(dd.get("request_id") or uuid.uuid4().hex)
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,100}", request_id):
+        return jsonify({"ok": False, "msg": "Identificador de consulta invalido"}), 400
+    clase = str(d.resolve())
+    clave = (clase, request_id)
+    contenido = (q, captura, usar_web)
+    with _COPILOTO_LOCK:
+        anterior = _COPILOTO_RESPUESTAS.get(clave)
+        if anterior:
+            if anterior[0] != contenido:
+                return jsonify({"ok": False, "msg": "El identificador ya pertenece a otra consulta"}), 409
+            return jsonify(anterior[1])
+        if clase in _COPILOTO_ACTIVOS:
+            return jsonify({"ok": False, "msg": "El copiloto esta respondiendo. Espera a que termine."}), 409
+        _COPILOTO_ACTIVOS.add(clase)
+    resultado = None
     try:
         if captura:
             r = copiloto.responder_con_captura(d, q, captura, usar_web=usar_web)
         else:
             r = copiloto.responder(d, q, usar_web=usar_web)
             copiloto.registrar_qa(d, q, r)
-        return jsonify({"ok": True, "respuesta": r, "respuesta_html": a_html(r)})
+        resultado = {"ok": True, "respuesta": r, "respuesta_html": a_html(r)}
     except Exception as e:
         config.log_error("panel-pregunta", f"{type(e).__name__}: {e}")
         r = f"⚠️ error interno del copiloto: {type(e).__name__}. Revisa logs/errores.log"
-        return jsonify({"ok": False, "respuesta": r, "respuesta_html": a_html(r)})
+        resultado = {"ok": False, "respuesta": r, "respuesta_html": a_html(r)}
+    finally:
+        with _COPILOTO_LOCK:
+            if resultado is not None:
+                _COPILOTO_RESPUESTAS[clave] = (contenido, resultado)
+                while len(_COPILOTO_RESPUESTAS) > 128:
+                    _COPILOTO_RESPUESTAS.popitem(last=False)
+            _COPILOTO_ACTIVOS.discard(clase)
+    return jsonify(resultado)
 
 
 @app.post("/api/captura_previa")
@@ -3866,11 +4114,11 @@ def api_region_shot():
     if d is None:
         return jsonify({"ok": False, "msg": "sin clase activa", "captura": ""})
     from .captura_pantalla import capturar_ahora
+    from .image_optimization import encode_webp
     st = est.leer_estado(d)
     img = capturar_ahora(monitor=st.get("monitor"))  # SIN region: monitor completo
-    nombre = f"region_{int(time.time())}.jpg"
-    img.save(d / "img" / nombre, format="JPEG", quality=80)
-    return jsonify({"ok": True, "captura": nombre})
+    encoded = base64.b64encode(encode_webp(img)).decode("ascii")
+    return jsonify({"ok": True, "captura": f"data:image/webp;base64,{encoded}"})
 
 
 @app.post("/api/region")
@@ -4185,7 +4433,8 @@ def api_img(nombre):
     d = _clase()
     if d is None:
         return ("", 404)
-    return send_from_directory(d / "img", nombre)
+    options = {"mimetype": "image/webp"} if Path(nombre).suffix.lower() == ".webp" else {}
+    return send_from_directory(d / "img", nombre, **options)
 
 
 def _vigilar_fin_modo_hijo() -> None:

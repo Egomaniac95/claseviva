@@ -1,0 +1,81 @@
+{
+  "classes": [
+    {
+      "class": "contenido/iii-i-infraestructura-para-big-data/clases/CLASE_01_clase-1-hadoop",
+      "sha256": "b0a999055eef96eef11f98992204fd1086f3457e48b2b0f695217874d4d2a694",
+      "images": 148,
+      "bytes": 36638146,
+      "html_bytes": 20898530
+    },
+    {
+      "class": "contenido/iii-i-infraestructura-para-big-data/clases/CLASE_02_clase-2",
+      "sha256": "25a581ecdace71ba7b927171ed3f07ac6d2523e39127f6b6db625834e41bad1d",
+      "images": 38,
+      "bytes": 12877201,
+      "html_bytes": 7341966
+    },
+    {
+      "class": "contenido/iii-i-infraestructura-para-big-data/clases/CLASE_03_spark",
+      "sha256": "8a9e41a886b5249b82938fb01c8e36a1d4a9f4bca563d8094e5e5ef69409c2bd",
+      "images": 235,
+      "bytes": 95013955,
+      "html_bytes": 54250518
+    },
+    {
+      "class": "contenido/iii-i-infraestructura-para-big-data/clases/CLASE_04_semana-4",
+      "sha256": "10115e8e9e3ccfe2a8dfef215bf9d082a4c544fd5789ac1abfcb40e3b12c379a",
+      "images": 877,
+      "bytes": 502691785,
+      "html_bytes": 287142403
+    },
+    {
+      "class": "contenido/maestria-inteligencia-artificial/clases/CLASE_01_clase-1",
+      "sha256": "db35bc3ab1a7f778d3294296c81ce6a6d06bdabbe3f963ffca03e1e83c4f4194",
+      "images": 251,
+      "bytes": 84991805,
+      "html_bytes": 48523335
+    },
+    {
+      "class": "contenido/maestria-inteligencia-artificial/clases/CLASE_02_clase2",
+      "sha256": "730fe67a3d320e644cb005c4e65798e2f0f1742882e9641a32c7597af013c164",
+      "images": 159,
+      "bytes": 53073366,
+      "html_bytes": 30307928
+    },
+    {
+      "class": "contenido/maestria-inteligencia-artificial/clases/CLASE_03_clase-2",
+      "sha256": "c15473f51c89457c9f8763ab729f28ca9631e7a7ff9f118240fc5c269023f71f",
+      "images": 234,
+      "bytes": 85020059,
+      "html_bytes": 48562012
+    },
+    {
+      "class": "contenido/maestria-inteligencia-artificial/clases/CLASE_04_clase-3",
+      "sha256": "23b85e5b8cb468a162ce92bed37ce9fcc8971eb83eb0d2a6e4d2e24e962bdfce",
+      "images": 70,
+      "bytes": 20849725,
+      "html_bytes": 11898040
+    },
+    {
+      "class": "contenido/maestria-inteligencia-artificial/clases/CLASE_05_clase-semana-4",
+      "sha256": "48dad3654bc2e7dedd26bb6ca2b8736127538007d9fe34189f5084ea11b57f7a",
+      "images": 123,
+      "bytes": 42496651,
+      "html_bytes": 24254455
+    },
+    {
+      "class": "contenido/maestria-inteligencia-artificial/clases/CLASE_06_ultima-clase",
+      "sha256": "58ac6c55c7bee757647ac01183740b0cacf9b2f978d40b992a2be524aeaf67af",
+      "images": 178,
+      "bytes": 31008478,
+      "html_bytes": 17688472
+    }
+  ],
+  "class_count": 10,
+  "images": 2313,
+  "class_bytes": 964661171,
+  "wav_count": 0,
+  "pending_state_files": 0,
+  "before_class_bytes": 4364513117,
+  "net_bytes_saved": 3399851946
+}

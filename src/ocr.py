@@ -78,6 +78,14 @@ class _WindowsOcrBackend:
     def __init__(self) -> None:
         if sys.platform != "win32":
             raise RuntimeError("Windows.Media.Ocr solo está disponible en Windows")
+        # PyWinRT 3.2.1 antes de ORT 1.27 puede impedir inicializar su DLL en
+        # Windows 11 (también desde fuente). Reservar primero el runtime CPU
+        # mantiene disponible el fallback. Es diferido hasta solicitar OCR:
+        # no crea modelos/sesiones, no usa GPU ni trabajo al abrir el panel.
+        try:
+            import onnxruntime  # noqa: F401
+        except ImportError:
+            pass  # OCR nativo sigue siendo válido sin el backend opcional.
         from winrt.windows.globalization import Language
         from winrt.windows.graphics.imaging import (
             BitmapAlphaMode,

@@ -461,7 +461,7 @@ def test_resumen_de_continuacion_debe_representar_toda_la_clase():
     assert "max. 500 palabras" in prompt
 
 
-def test_saneador_corrige_comentario_totensor_autocontradictorio():
+def test_saneador_preserva_comentario_codigo_sin_correccion_automatica():
     raw = (
         "```python\n"
         "transforms.ToTensor(),  # PIL -> Tensor, [0,255] -> [0,0]\n"
@@ -470,8 +470,7 @@ def test_saneador_corrige_comentario_totensor_autocontradictorio():
 
     clean = post_procesar._sanear_contenido_llm_publico(raw)
 
-    assert "[0,255] -> [0,1]" in clean
-    assert "[0,0]" not in clean
+    assert clean == raw
 
 
 def test_rangos_publicados_usan_tiempo_util_en_todas_las_partes():
@@ -1294,11 +1293,9 @@ def test_tarjeta_visual_ofrece_lectura_guiada_detallada_y_accion_de_estudio():
     )
 
     assert "Lectura guiada — idea central" in card
-    assert "👁️ Qué observar" in card
-    assert "🧠 Cómo interpretarla" in card
-    assert "🎯 Para estudiar" in card
-    assert "Diferencia muestra, características, etiqueta" in card
-    assert "cuántas observaciones, variables y clases" in card
+    assert "partición usada para ajustar el modelo" in card
+    assert "Diferencia muestra, características, etiqueta" not in card
+    assert "cuántas observaciones, variables y clases" not in card
     assert "Dataset de entrenamiento:" not in card
 
 
@@ -1378,8 +1375,8 @@ def test_placeholder_visual_se_reemplaza_por_lectura_especifica_de_demo():
     assert "estado interno de la demostración" in card
     assert "Convolutional Network Demo from 1989" in card
     assert "Evidencia visual conservada para este tramo" not in card
-    assert "muestra inferencia, no el proceso de entrenamiento" in card
-    assert "28 × 28 píxeles" in card
+    assert "muestra inferencia, no el proceso de entrenamiento" not in card
+    assert "28 × 28 píxeles" not in card
 
 
 def test_gate_final_reintegra_toda_identidad_principal_y_secuencia(tmp_path):
@@ -1462,7 +1459,7 @@ def test_busqueda_observada_se_publica_visible_con_consulta_y_sin_ocr_crudo(
     assert 'src="img/search.jpg"' in markdown
     assert "anuncio lateral controles" not in markdown
     assert "<details>" not in markdown
-    assert "👁️ Qué observar" in markdown
+    assert "La captura conserva una consulta web" in markdown
 
 
 def test_consulta_web_corrige_ocr_con_audio_y_agrega_preposicion():
@@ -1531,7 +1528,8 @@ def test_cuadricula_de_dataset_recibe_guia_de_datos_no_de_formula():
         caption_confiable=True,
     )
 
-    assert "Diferencia muestra, características, etiqueta" in card
+    assert "La cuadrícula reúne ejemplos del conjunto MNIST" in card
+    assert "Diferencia muestra, características, etiqueta" not in card
     assert "Localiza símbolos, operadores" not in card
 
 
@@ -1923,10 +1921,10 @@ def test_saneador_generaliza_rotulos_plural_buscar_y_fuentes_de_pipeline():
     assert queries == ["XOR perceptron hidden layer backpropagation"]
 
 
-def test_prompt_de_leccion_prohibe_transcript_crudo_y_datos_personales():
+def test_prompt_de_leccion_preserva_formulaciones_utiles_y_omite_datos_personales():
     prompt = post_procesar.PROMPT_SLIDE_GUIDED
 
-    assert "No pegues bloques rotulados Transcript" in prompt
+    assert "conserva las formulaciones literales y el código" in prompt
     assert "No publiques correos" in prompt
     assert "fuentes externas" in prompt
     assert "nunca publiques rótulos como 'OCR de la diapositiva'" in prompt

@@ -670,7 +670,7 @@ def _continuar_respuesta(parcial: str, transcript: str, ocr_texto: str,
                          contexto_previo: str,
                          motivos_previos: list[str] | None = None
                          ) -> tuple[str, list[str]]:
-    """Hace un único rescate compacto sin reenviar el prompt largo completo."""
+    """Reintenta una vez con toda la evidencia del bloque y contexto acotado."""
     instruccion_buscar = (
         "Termina con una línea BUSCAR: y 3-5 palabras clave en inglés."
         if _web_enrichment_enabled()
@@ -679,7 +679,8 @@ def _continuar_respuesta(parcial: str, transcript: str, ocr_texto: str,
     mensajes = [
         {"role": "system", "content": (
             "Eres un editor pedagógico. Reescribe una ficha Markdown completa y "
-            "autocontenida a partir del borrador y la evidencia acotada. Prioriza "
+            "autocontenida a partir del borrador y la evidencia del bloque. Conserva "
+            "los datos, ejemplos, procedimientos y correcciones de esa evidencia. Prioriza "
             "Panorama acumulado, Desarrollo detallado del tramo actual y Contexto "
             "para continuar; añade conceptos clave y una pregunta de recuperación "
             "si caben. No copies la transcripción cruda ni inventes información. "
@@ -690,10 +691,10 @@ def _continuar_respuesta(parcial: str, transcript: str, ocr_texto: str,
             + _recortar_evidencia_nueva(parcial, 2200)
             + "\n\nESTADO PEDAGÓGICO ANTERIOR ACOTADO:\n"
             + _recortar_evidencia_nueva(contexto_previo, 2200)
-            + "\n\nTRANSCRIPCIÓN NUEVA ACOTADA:\n"
-            + _recortar_evidencia_nueva(transcript, 4000)
-            + "\n\nOCR NUEVO ACOTADO:\n"
-            + _recortar_evidencia_nueva(ocr_texto, 1200)
+            + "\n\nTRANSCRIPCIÓN NUEVA COMPLETA DEL BLOQUE:\n"
+            + transcript
+            + "\n\nOCR NUEVO COMPLETO DEL BLOQUE:\n"
+            + ocr_texto
         )},
     ]
     detalle = preguntar_detalle(
@@ -1068,7 +1069,7 @@ def _chunks_pendientes_transcript(d: Path) -> list[Path]:
 
 
 def _esperar_transcriptor_fin(d: Path) -> dict:
-    """Espera la barrera común y siempre declara si terminó o alcanzó timeout."""
+    """Espera trabajo activo; deja el STT estacionado para Consolidar."""
     try:
         timeout = float(os.environ.get("CLASE_ESCRIBA_FIN_WAIT", "75"))
     except ValueError:
@@ -1085,6 +1086,27 @@ def _esperar_transcriptor_fin(d: Path) -> dict:
                 "timed_out": False,
                 "waited_seconds": round(max(0.0, ahora - inicio_espera), 3),
             }
+        if (reporte.get("capture_ready") and reporte.get("pending_stt_count")
+                and not reporte.get("missing_audio_chunk_count")
+                and not reporte.get("invalid_stt_count")):
+            st = est.leer_estado(d)
+            lifecycle = st.get("stt_lifecycle")
+            if not isinstance(lifecycle, dict):
+                lifecycle = {}
+            if st.get("estado") == "fin" and (
+                    lifecycle.get("status") == "pending_remote_stt"
+                    or not config.diagnosticar_instancia(
+                        "transcriptor", modulo="src.transcriptor_vivo",
+                        class_dir=d).get("owner_valid")):
+                # No esperar 75 s por una API en cooldown o un proceso ya cerrado.
+                # ready sigue siendo False: ni publicar un cierre parcial ni
+                # consumir cursores; Consolidar recuperará los WAV conservados.
+                return {
+                    **reporte,
+                    "deferred_to_consolidation": True,
+                    "timed_out": False,
+                    "waited_seconds": round(max(0.0, ahora - inicio_espera), 3),
+                }
         estado_actual = (
             reporte.get("status"), reporte.get("pending_stt_count"),
             reporte.get("unfinished_capture_count"),
@@ -1119,14 +1141,41 @@ def _bloque_parcial(cuerpo: str | None, texto: str, motivos: list[str]) -> str:
     return "\n".join(piezas).strip()
 
 
+def _dividir_evidencia_nueva(texto: str, limite: int) -> list[str]:
+    """Parte evidencia por espacios, conservando cada carácter una sola vez."""
+    bloques = []
+    while len(texto) > limite:
+        corte = max(texto.rfind("\n", 0, limite), texto.rfind(" ", 0, limite))
+        corte = corte + 1 if corte >= limite // 2 else limite
+        bloques.append(texto[:corte])
+        texto = texto[corte:]
+    bloques.append(texto)
+    return bloques
+
+
 def generar_resumen_en_vivo(texto: str, ocr_junto: str, rango: str,
                             contexto_acumulado: str = "") -> dict:
+    transcript_bloques = _dividir_evidencia_nueva(texto, MAX_TRANSCRIPT_RESUMEN_CHARS)
+    ocr_bloques = _dividir_evidencia_nueva(ocr_junto, MAX_OCR_RESUMEN_CHARS)
+    total = max(len(transcript_bloques), len(ocr_bloques))
+    cuerpos = []
+    contexto = contexto_acumulado
+    for indice in range(total):
+        transcript = transcript_bloques[indice] if indice < len(transcript_bloques) else ""
+        ocr_bloque = ocr_bloques[indice] if indice < len(ocr_bloques) else ""
+        etiqueta = rango if total == 1 else f"{rango}, bloque {indice + 1} de {total}"
+        resultado = _generar_ficha_bloque(transcript, ocr_bloque, etiqueta, contexto)
+        cuerpos.append(resultado["cuerpo"])
+        if resultado["estado"] != "generado":
+            return {**resultado, "cuerpo": "\n\n".join(cuerpos)}
+        contexto = resultado["estado_pedagogico"] or contexto
+    return {**resultado, "cuerpo": "\n\n".join(cuerpos)}
+
+
+def _generar_ficha_bloque(texto: str, ocr_junto: str, rango: str,
+                         contexto_acumulado: str) -> dict:
     texto_tramo = texto
     contexto = str(contexto_acumulado or "")[:MAX_CONTEXTO_PEDAGOGICO_CHARS]
-    transcript_prompt = _recortar_evidencia_nueva(
-        texto_tramo, MAX_TRANSCRIPT_RESUMEN_CHARS)
-    ocr_prompt = _recortar_evidencia_nueva(
-        ocr_junto, MAX_OCR_RESUMEN_CHARS)
     piezas = []
     if contexto.strip():
         piezas.extend([
@@ -1135,9 +1184,9 @@ def generar_resumen_en_vivo(texto: str, ocr_junto: str, rango: str,
         ])
     piezas.extend([
         f"TRANSCRIPCIÓN NUEVA ({rango}):",
-        transcript_prompt or "(sin transcript nuevo)", "",
+        texto_tramo or "(sin transcript nuevo)", "",
         "TEXTO OCR NUEVO DE PANTALLA:",
-        ocr_prompt or "(sin capturas nuevas)",
+        ocr_junto or "(sin capturas nuevas)",
     ])
     prompt_usuario = "\n".join(piezas)
     mensajes = [
@@ -1687,7 +1736,7 @@ def procesar_bloque(d: Path, desde: float, hasta: float, parte: int,
             )
             ocr_textos.append(
                 f"--- pantalla {_fmt_duracion(_tiempo_relativo_clase(d, c['t']))}"
-                f"{marca_parte}{marca} ---\n{t[:1500]}")
+                f"{marca_parte}{marca} ---\n{t}")
     ocr_junto = "\n".join(ocr_textos)
 
     rango = _rango_clase(d, desde, hasta)
@@ -1778,6 +1827,16 @@ def modo_test() -> int:
     return 0
 
 
+def inicio_ultima_sesion(d: Path, state: dict) -> float:
+    inicio = _numero_finito(state.get("inicio"), 0)
+    parte = int(state.get("parte") or 1)
+    return max([inicio, *[
+        _numero_finito(row.get("t"), inicio)
+        for row in est.leer_jsonl(d / "marcas.jsonl")
+        if row.get("tipo") == "reanudar_sesion" and int(row.get("parte") or 0) == parte
+    ]])
+
+
 def main() -> int:
     config.stdout_utf8()
     if "--test" in sys.argv:
@@ -1794,6 +1853,9 @@ def main() -> int:
     estado_propio = d / "escriba_estado.json"
     st_inicial = est.leer_estado(d)
     inicio = _numero_finito(st_inicial.get("inicio"), time.time())
+    # Tras compactar y continuar, los cursores pueden no existir. No generar
+    # ventanas vacías durante las horas entre una sesión terminada y su reanudación.
+    inicio = max(inicio, inicio_ultima_sesion(d, st_inicial))
     intervalo_inicial = _intervalo_auto_seg(st_inicial) or AUTO_RESUMEN_SEG
     ultimo_auto, ultimo_manual, ultimo_final, proximo_auto = _cargar_estado_escriba(
         estado_propio, inicio, intervalo=intervalo_inicial)
@@ -1828,10 +1890,16 @@ def main() -> int:
                 if not espera.get("ready"):
                     estado_barrera = str(espera.get("status") or "incompleta")
                     pendientes = int(espera.get("pending_stt_count") or 0)
-                    msg = (
-                        "Cierre pendiente: timeout de barrera final "
-                        f"(status={estado_barrera}, STT pendientes={pendientes})."
-                    )
+                    if espera.get("deferred_to_consolidation"):
+                        msg = (
+                            f"Grabación finalizada. Audios pendientes: {pendientes}, "
+                            "guardados localmente. Pulsa Consolidar para "
+                            "recuperarlos y generar la lección final.")
+                    else:
+                        msg = (
+                            "Cierre pendiente: timeout de barrera final "
+                            f"(status={estado_barrera}, STT pendientes={pendientes})."
+                        )
                     est.actualizar_estado(
                         d, resumen_estado="pendiente", resumen_msg=msg,
                         resumen_t=time.time())

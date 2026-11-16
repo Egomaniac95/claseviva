@@ -1,18 +1,23 @@
 """Paquete ligero y reanudable de una clase cerrada.
 
-La carpeta cerrada conserva únicamente ``leccion_final.md`` y ``img/``. La
+La carpeta cerrada conserva ``leccion_final.md``, su HTML ligero e ``img/``. La
 metadata necesaria para continuar vive en un comentario HTML versionado dentro
 del Markdown; no se necesita el audio, transcript ni los manifests históricos.
 """
 from __future__ import annotations
 
+import base64
 import hashlib
+import html
 import json
+import math
 import os
 import re
 import shutil
 import time
 import uuid
+from collections import Counter
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -30,6 +35,125 @@ _LOCAL_IMG_RE = re.compile(
     r"""|\[\[IMG:(?P<marker>[\w.\-/]+))""",
     re.IGNORECASE,
 )
+_SOURCE_START = "<!-- CLASEVIVA_SOURCE_TRANSCRIPT_START -->"
+_SOURCE_END = "<!-- CLASEVIVA_SOURCE_TRANSCRIPT_END -->"
+_SOURCE_RE = re.compile(
+    re.escape(_SOURCE_START) + r".*?" + re.escape(_SOURCE_END), re.DOTALL)
+
+
+def strip_source_transcript(markdown: str) -> str:
+    return _SOURCE_RE.sub("", str(markdown or "")).rstrip()
+
+
+def protect_source_transcript(markdown: str) -> tuple[str, dict[str, str]]:
+    """Aísla el texto literal para que Markdown y las fórmulas no lo reescriban."""
+    replacements = {}
+
+    def replace(match):
+        token = f"CLASEVIVASOURCE{uuid.uuid4().hex}"
+        replacements[token] = match.group(0)[len(_SOURCE_START):-len(_SOURCE_END)].strip()
+        return "\n\n" + token + "\n\n"
+
+    return _SOURCE_RE.sub(replace, markdown), replacements
+
+
+def _source_bytes(segments: list[dict]) -> bytes:
+    return json.dumps(segments, ensure_ascii=False, sort_keys=True,
+                      separators=(",", ":"), allow_nan=False).encode("utf-8")
+
+
+def _source_segments(payload: dict) -> list[dict]:
+    if payload.get("version") != 1 or payload.get("encoding") != "json-base64":
+        raise ValueError("formato del registro de transcripción inválido")
+    try:
+        raw = base64.b64decode(payload["data"], validate=True)
+        segments = json.loads(raw.decode("utf-8"))
+    except (KeyError, ValueError, TypeError, UnicodeError) as error:
+        raise ValueError("registro de transcripción ilegible") from error
+    if (not isinstance(segments, list)
+            or any(not isinstance(row, dict) for row in segments)
+            or len(segments) != payload.get("count")
+            or hashlib.sha256(raw).hexdigest() != payload.get("sha256")
+            or raw != _source_bytes(segments)):
+        raise ValueError("el registro de transcripción no coincide con su inventario")
+    return segments
+
+
+def _source_appendix(segments: list[dict], *, prior_source_missing: bool) -> str:
+    lines = [_SOURCE_START, "", "<details>",
+             "<summary>Registro completo de lo transcrito</summary>", "",
+             ("<p>Texto reconocido por el transcriptor, conservado por segmento. "
+              "Puede contener errores de reconocimiento.</p>")]
+    if prior_source_missing:
+        lines.append(
+            "<p>La publicación anterior no incluía un registro de transcripción "
+            "verificable. Aquí se conservan todos los segmentos disponibles "
+            "para esta actualización.</p>")
+    for index, segment in enumerate(segments, 1):
+        part = html.escape(str(segment.get("parte", "")))
+        text = html.escape(str(segment.get("texto", segment.get("text", ""))))
+        text = text.replace("\n", "<br>\n")
+        label = f"Parte {part} · segmento {index}" if part else f"Segmento {index}"
+        try:
+            timestamp = float(segment["t"])
+            if math.isfinite(timestamp) and timestamp >= 0:
+                timing = (
+                    datetime.fromtimestamp(timestamp, timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+                    if timestamp >= 1_000_000_000 else f"Tiempo {format_hms(timestamp)}")
+                label += f" · {timing}"
+        except (KeyError, TypeError, ValueError, OverflowError, OSError):
+            pass
+        lines.append(f"<p><small>{label}</small><br>{text}</p>")
+    lines.extend(["", "</details>", "", _SOURCE_END])
+    return "\n".join(lines)
+
+
+def attach_source_transcript(markdown: str, segments: list[dict], *,
+                             previous_markdown: str = "") -> tuple[str, dict]:
+    """Publica la fuente íntegra sin pasarla por el resumen ni el merge del LLM."""
+    previous_metadata = parse_metadata(previous_markdown) or {}
+    previous_source = previous_metadata.get("source_transcript")
+    previous_segments = _source_segments(previous_source) if previous_source is not None else []
+    prior_source_missing = bool(
+        (previous_markdown.strip() and previous_source is None)
+        or (previous_source or {}).get("prior_source_missing"))
+    # Descuenta solo las ocurrencias ya archivadas. Conserva incluso dos filas
+    # iguales de la entrada actual cuando ambas fueron registradas por STT.
+    previous_counts = Counter(_source_bytes([row]) for row in previous_segments)
+    combined = list(previous_segments)
+    for row in segments:
+        if not isinstance(row, dict):
+            raise TypeError("segmento de transcripción inválido")
+        key = _source_bytes([row])
+        if previous_counts[key]:
+            previous_counts[key] -= 1
+        else:
+            combined.append(row)
+    raw = _source_bytes(combined)
+    payload = {
+        "version": 1, "encoding": "json-base64", "count": len(combined),
+        "sha256": hashlib.sha256(raw).hexdigest(),
+        "data": base64.b64encode(raw).decode("ascii"),
+        "prior_source_missing": prior_source_missing,
+    }
+    body = strip_source_transcript(markdown)
+    return (body + "\n\n" + _source_appendix(
+        combined, prior_source_missing=prior_source_missing) + "\n", payload)
+
+
+def validate_source_transcript(markdown: str, metadata: dict | None) -> list[str]:
+    payload = (metadata or {}).get("source_transcript")
+    if payload is None:
+        return []  # Las publicaciones históricas siguen siendo legibles.
+    try:
+        segments = _source_segments(payload)
+        expected = _source_appendix(
+            segments, prior_source_missing=bool(payload.get("prior_source_missing")))
+    except (ValueError, TypeError, AttributeError) as error:
+        return [str(error)]
+    if _SOURCE_RE.findall(markdown) != [expected]:
+        return ["el apéndice publicado difiere de la transcripción archivada"]
+    return []
 
 
 def format_hms(seconds: float | int) -> str:
@@ -120,7 +244,7 @@ def recording_map_markdown(parts: list[dict]) -> str:
 def local_image_references(markdown: str) -> list[str]:
     refs: list[str] = []
     seen: set[str] = set()
-    for match in _LOCAL_IMG_RE.finditer(str(markdown or "")):
+    for match in _LOCAL_IMG_RE.finditer(strip_source_transcript(markdown)):
         raw = next(
             value for value in match.group("html", "markdown", "marker")
             if value is not None
@@ -256,7 +380,7 @@ def validate_candidate(class_dir: Path | str, markdown: str | None = None) -> di
         relative for relative in references
         if not (class_path / "img" / Path(relative)).is_file()
     ]
-    hash_errors: list[str] = []
+    hash_errors: list[str] = validate_source_transcript(text, metadata)
     metadata_images = metadata.get("images") if isinstance(metadata, dict) else None
     if isinstance(metadata_images, list) and metadata_images:
         declared = {
@@ -436,7 +560,7 @@ def _relative_to(path: Path, root: Path) -> str:
 def _cleanup_candidates(class_dir: Path, references: set[str]) -> list[Path]:
     candidates = [
         path for path in class_dir.iterdir()
-        if path.name not in {"leccion_final.md", "img"}
+        if path.name not in {"leccion_final.md", "leccion_final.html", "img"}
     ]
     image_root = class_dir / "img"
     if image_root.is_dir():
@@ -502,6 +626,18 @@ def finalize_lightweight_package(
                if detail else ""))
 
     references = set(validation["references"])
+    source = validation["metadata"].get("source_transcript")
+    transcript = class_path / "transcript.jsonl"
+    if source is not None and transcript.is_file():
+        archived = Counter(_source_bytes([row]) for row in _source_segments(source))
+        current = Counter(
+            _source_bytes([json.loads(line)])
+            for line in transcript.read_text(encoding="utf-8").splitlines()
+            if line.strip())
+        if current - archived:
+            raise RuntimeError("hay segmentos de transcripción sin conservar en la lección")
+    from .lesson_export import export_html
+    export_html(class_path)
     candidates = _cleanup_candidates(class_path, references)
     stage = class_path.parent / (
         f".{class_path.name}.compactando-{time.strftime('%Y%m%d_%H%M%S')}-"
@@ -531,9 +667,9 @@ def finalize_lightweight_package(
         _prune_empty_dirs(class_path / "img")
         after = validate_candidate(class_path)
         top_level = sorted(path.name for path in class_path.iterdir())
-        if not after["ok"] or top_level != ["img", "leccion_final.md"]:
+        if not after["ok"] or top_level != ["img", "leccion_final.html", "leccion_final.md"]:
             raise RuntimeError(
-                "la verificación posterior no produjo solo leccion_final.md e img/")
+                "la verificación posterior no produjo Markdown, HTML e img/")
     except Exception:
         for source, target in reversed(moved):
             if not target.exists():
@@ -552,7 +688,7 @@ def finalize_lightweight_package(
     shutil.rmtree(stage)
     return {
         "ok": True,
-        "kept_top_level": ["img", "leccion_final.md"],
+        "kept_top_level": ["img", "leccion_final.html", "leccion_final.md"],
         "images_kept": len(references),
         "paths_removed": moved_count,
         "bytes_removed": bytes_removed,

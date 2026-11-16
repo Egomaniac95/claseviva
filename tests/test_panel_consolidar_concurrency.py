@@ -121,4 +121,6 @@ def test_consolidar_libera_reserva_en_finally_si_worker_falla(monkeypatch, tmp_p
     workers[0]()
 
     assert panel._POST_CORRIENDO is False
-    assert panel._POST_ERROR == "ValueError: fallo sintetico"
+    assert "ValueError" in panel._POST_ERROR
+    assert "conservados" in panel._POST_ERROR
+    assert "Consolidar" in panel._POST_ERROR

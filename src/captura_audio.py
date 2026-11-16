@@ -2,7 +2,7 @@
 en chunks WAV de 30 s dentro de clases/<id>/audio/.
 
 AUTO-PAUSA POR SILENCIO: si pasan CLASE_SILENCIO_MIN minutos (default 2) sin audio
-(RMS < CLASE_SILENCIO_RMS), se asume break/receso: se activa `auto_pausa` en el estado
+(todas las muestras PCM en cero), se asume break/receso: se activa `auto_pausa` en el estado
 (pantalla y escriba también dejan de almacenar) y los chunks silenciosos se DESCARTAN.
 Se sigue escuchando en silencio; al volver el audio se reanuda todo solo.
 
@@ -25,6 +25,7 @@ from pathlib import Path
 from types import MappingProxyType
 
 import pyaudiowpatch as pyaudio
+import numpy as np
 
 from . import audio_sesiones
 from . import audio_manifest
@@ -37,8 +38,6 @@ FRAMES_BUF = 1024
 PICO_SESION_SILENCIO = 0.005
 PICO_SESION_ACTIVA = float(os.environ.get(
     "CLASE_PICO_SESION_ACTIVA", str(PICO_SESION_SILENCIO)))
-PCM_CASI_CERO_RMS = float(os.environ.get("CLASE_PCM_CASI_CERO_RMS", "5"))
-PCM_CASI_CERO_PEAK = int(os.environ.get("CLASE_PCM_CASI_CERO_PEAK", "8"))
 MENSAJE_CHROME_MUTEADO = (
     "Chrome parece silenciado o sin audio. Si lo silencias desde el mezclador, "
     "ClaseViva no puede capturarlo."
@@ -50,11 +49,16 @@ MENSAJE_EDGE_MUTEADO = (
 
 
 def nombre_fuente_audio(fuente: str) -> str:
-    return {"chrome": "Chrome", "msedge": "Microsoft Edge"}.get(fuente, fuente or "navegador")
+    return "Chrome" if fuente == "chrome" else audio_sesiones.nombre_fuente(fuente)
 
 
 def mensaje_muteado(fuente: str) -> str:
-    return MENSAJE_EDGE_MUTEADO if fuente == "msedge" else MENSAJE_CHROME_MUTEADO
+    if fuente == "chrome":
+        return MENSAJE_CHROME_MUTEADO
+    if fuente == "msedge":
+        return MENSAJE_EDGE_MUTEADO
+    return (f"{nombre_fuente_audio(fuente)} parece silenciado o sin audio. "
+            "Revisa su volumen en el mezclador de Windows.")
 
 
 def mensaje_video_pausado(fuente: str) -> str:
@@ -81,7 +85,7 @@ def diagnostico_silencio_proceso(fuente: str, modo: str, rms: float,
     process-loopback del navegador entrega silencio durante varios chunks y el medidor
     de la sesion del navegador tambien esta en cero.
     """
-    if fuente not in audio_sesiones.NAVEGADORES or ":proceso" not in (modo or ""):
+    if not audio_sesiones.es_fuente_aplicacion(fuente) or ":proceso" not in (modo or ""):
         return {"warning": "", "detalle": ""}
     if chunks_silencio < _chunks_warning(chunks_umbral):
         return {"warning": "", "detalle": ""}
@@ -107,7 +111,7 @@ def proceso_loopback_silencioso_con_pantalla_activa(
     Si el process-loopback del navegador cae bajo el umbral pero la pantalla sigue activa,
     se prueba fallback de dispositivo con enfoque antes de declarar un break de clase.
     """
-    if fuente not in audio_sesiones.NAVEGADORES or ":proceso" not in (modo or ""):
+    if not audio_sesiones.es_fuente_aplicacion(fuente) or ":proceso" not in (modo or ""):
         return False
     if visual_es_idle:
         return False
@@ -129,24 +133,22 @@ def calcular_rms(data: bytes) -> float:
 
 
 def calcular_peak(data: bytes) -> int:
-    """Pico absoluto aproximado de PCM int16."""
+    """Pico exacto de todos los canales; conserva incluso una muestra tenue."""
     usable = len(data) - (len(data) % 2)
-    muestras = array.array("h", data[:usable])[::15]
-    if not muestras:
+    muestras = np.frombuffer(data, dtype="<i2", count=usable // 2)
+    if not muestras.size:
         return 0
-    return max(abs(int(x)) for x in muestras)
+    return max(abs(int(muestras.min())), abs(int(muestras.max())))
+
+
+def _pcm_no_nulo(data: bytes) -> bool:
+    """Escaneo completo en C, sin iterar las muestras en Python."""
+    return data.count(b"\x00") != len(data)
 
 
 def pcm_tiene_senal_util(rms: float, peak: int, silencio_rms: int | None = None) -> bool:
-    """Distingue voz baja de PCM casi plano sin depender solo del RMS global."""
-    silencio_rms = config.SILENCIO_RMS if silencio_rms is None else int(silencio_rms)
-    return (
-        rms >= silencio_rms
-        or (
-            rms >= max(12.0, silencio_rms * 0.25)
-            and peak >= max(100, silencio_rms * 2)
-        )
-    )
+    """La amplitud baja por sí sola no demuestra ausencia de voz."""
+    return rms > 0 or peak > 0
 
 
 def pcm_parcial_publicable(data: bytes, canales: int,
@@ -155,21 +157,21 @@ def pcm_parcial_publicable(data: bytes, canales: int,
     frame_bytes = max(2, int(canales) * 2)
     if len(data) < frame_bytes:
         return False
-    return pcm_tiene_senal_util(
-        calcular_rms(data), calcular_peak(data), silencio_rms)
+    return _pcm_no_nulo(data[:len(data) - len(data) % frame_bytes])
 
 
 def clasificar_muestra_audio(fuente: str, rms: float, peak: int,
                              pico_sesion: float | None,
-                             silencio_rms: int | None = None) -> dict:
+                             silencio_rms: int | None = None, *,
+                             silencio_digital: bool | None = None) -> dict:
     """Clasifica si un chunk debe guardarse, descartarse o denunciar captura rota."""
     silencio_rms = config.SILENCIO_RMS if silencio_rms is None else int(silencio_rms)
-    fuente_nav = fuente in audio_sesiones.NAVEGADORES
+    fuente_nav = audio_sesiones.es_fuente_aplicacion(fuente)
     navegador_activo = (
         fuente_nav and pico_sesion is not None and pico_sesion >= PICO_SESION_ACTIVA)
-    pcm_casi_cero = rms <= PCM_CASI_CERO_RMS and peak <= PCM_CASI_CERO_PEAK
+    pcm_casi_cero = (rms == 0 and peak == 0) if silencio_digital is None else silencio_digital
     captura_rota = navegador_activo and pcm_casi_cero
-    pcm_util = pcm_tiene_senal_util(rms, peak, silencio_rms)
+    pcm_util = not pcm_casi_cero
     if captura_rota:
         return {
             "es_silencio": True,
@@ -187,7 +189,7 @@ def clasificar_muestra_audio(fuente: str, rms: float, peak: int,
             "pcm_util": pcm_util,
         }
     # El medidor de sesion puede quedar en cero aunque el loopback entregue PCM
-    # valido. La evidencia PCM fuerte prevalece para no descartar voz real.
+    # valido. Cualquier evidencia PCM no nula prevalece para no descartar voz real.
     es_silencio = not pcm_util
     return {
         "es_silencio": es_silencio,
@@ -219,7 +221,7 @@ def seleccionar_sesion_audio(
 
 def metricas_wav(ruta: Path, ventana_seg: float = 1.0,
                  silencio_rms: int | None = None) -> dict:
-    """Métricas stdlib para auditar WAV sin modificar evidencia real."""
+    """Métricas de todos los canales, sin modificar ni cancelar evidencia real."""
     silencio_rms = config.SILENCIO_RMS if silencio_rms is None else int(silencio_rms)
     with wave.open(str(ruta), "rb") as wf:
         rate = int(wf.getframerate())
@@ -229,33 +231,23 @@ def metricas_wav(ruta: Path, ventana_seg: float = 1.0,
         raw = wf.readframes(frames)
     if sampwidth != 2:
         raise ValueError(f"metricas_wav espera PCM int16, sampwidth={sampwidth}")
-    muestras = array.array("h", raw)
-    if not muestras or rate <= 0 or canales <= 0:
+    muestras = np.frombuffer(raw, dtype="<i2").astype(np.float64)
+    if not muestras.size or rate <= 0 or canales <= 0:
         return {
             "duration_sec": 0.0, "sample_rate": rate, "channels": canales,
             "rms": 0.0, "peak": 0, "rms_ventanas": [],
             "silent_window_pct": 100.0, "clipping_pct": 0.0,
             "useful_audio": False,
         }
-    mono = []
-    for i in range(0, len(muestras), canales):
-        frame = muestras[i:i + canales]
-        if frame:
-            mono.append(sum(frame) / len(frame))
-    if not mono:
-        rms = 0.0
-        peak = 0
-    else:
-        rms = math.sqrt(sum(x * x for x in mono) / len(mono))
-        peak = max(abs(int(x)) for x in mono)
-    win = max(1, int(rate * max(0.1, float(ventana_seg))))
+    rms = math.sqrt(float(np.mean(np.square(muestras))))
+    peak = int(np.max(np.abs(muestras)))
+    win = max(1, int(rate * max(0.1, float(ventana_seg)))) * canales
     rms_ventanas = []
-    for i in range(0, len(mono), win):
-        seg = mono[i:i + win]
-        if seg:
-            rms_ventanas.append(math.sqrt(sum(x * x for x in seg) / len(seg)))
+    for i in range(0, len(muestras), win):
+        seg = muestras[i:i + win]
+        rms_ventanas.append(math.sqrt(float(np.mean(np.square(seg)))))
     silenciosas = sum(1 for v in rms_ventanas if v < silencio_rms)
-    clipping = sum(1 for v in mono if abs(v) >= 32767)
+    clipping = int(np.count_nonzero(np.abs(muestras) >= 32767))
     silent_pct = silenciosas / max(1, len(rms_ventanas)) * 100.0
     return {
         "duration_sec": frames / rate,
@@ -266,8 +258,8 @@ def metricas_wav(ruta: Path, ventana_seg: float = 1.0,
         "peak": peak,
         "rms_ventanas": rms_ventanas,
         "silent_window_pct": silent_pct,
-        "clipping_pct": clipping / max(1, len(mono)) * 100.0,
-        "useful_audio": pcm_tiene_senal_util(rms, peak, silencio_rms),
+        "clipping_pct": clipping / len(muestras) * 100.0,
+        "useful_audio": _pcm_no_nulo(raw),
     }
 
 
@@ -516,7 +508,7 @@ class WatchdogCaptura:
         self._consecutivas = 0
 
     def observar(self, data: bytes, rate: int, canales: int) -> None:
-        if self.fuente not in audio_sesiones.NAVEGADORES or not data:
+        if not audio_sesiones.es_fuente_aplicacion(self.fuente) or not data:
             return
         frame_bytes = max(2, int(canales) * 2)
         bytes_ventana = max(frame_bytes, round(
@@ -525,23 +517,22 @@ class WatchdogCaptura:
         while len(self._buffer) >= bytes_ventana:
             ventana = bytes(self._buffer[:bytes_ventana])
             del self._buffer[:bytes_ventana]
+            if _pcm_no_nulo(ventana):
+                self._consecutivas = 0
+                continue
+            # Enumerar sesiones COM solo aporta una decisión cuando el PCM es
+            # plano. Hacerlo durante cada segundo de voz retrasa el drenaje.
             pico_sesion = self.obtener_pico(self.fuente)
             if pico_sesion is None:
                 self._consecutivas = 0
                 continue
             pico_sesion = float(pico_sesion)
             self.picos.append(pico_sesion)
-            rms = calcular_rms(ventana)
-            peak = calcular_peak(ventana)
-            rota = (
-                pico_sesion >= PICO_SESION_ACTIVA
-                and rms <= PCM_CASI_CERO_RMS
-                and peak <= PCM_CASI_CERO_PEAK
-            )
+            rota = pico_sesion >= PICO_SESION_ACTIVA
             self._consecutivas = self._consecutivas + 1 if rota else 0
             if self._consecutivas >= self.ventanas_rotas:
                 raise CapturaRotaTemprana(
-                    rms, peak, pico_sesion, self._consecutivas)
+                    0.0, 0, pico_sesion, self._consecutivas)
 
 
 class CapturadorDispositivo:
@@ -653,6 +644,23 @@ class CapturadorDispositivo:
         data, continuidad = self.leer_frames(
             frames, sonda=sonda, inspector=inspector, consumer=consumer)
         return data, self.rate, self.canales, continuidad
+
+    def extraer_parcial(self) -> tuple[bytes, int, int, dict]:
+        """Entrega los frames recibidos antes de interrumpir una lectura."""
+        frames = len(self._pendiente) // self.frame_bytes
+        nbytes = frames * self.frame_bytes
+        data = bytes(self._pendiente[:nbytes])
+        del self._pendiente[:nbytes]
+        start_frame = self._delivered_frames
+        self._delivered_frames += frames
+        return data, self.rate, self.canales, {
+            "stream_id": self.stream_id,
+            "start_frame": start_frame,
+            "end_frame": self._delivered_frames,
+            "pcm_wall_start": self.wall_anchor + start_frame / self.rate,
+            "pcm_wall_end": self.wall_anchor + self._delivered_frames / self.rate,
+            "terminal_discontinuity": True,
+        }
 
     def close(self) -> None:
         if self._cerrado:
@@ -1333,7 +1341,7 @@ def modo_test(segundos: int) -> int:
         rms = calcular_rms(data)
     kb = destino.stat().st_size // 1024
     print(f"TEST_OK archivo={destino} tamano={kb}KB rms={rms:.0f} "
-          f"(rms > {config.SILENCIO_RMS} = se oye audio; menor = silencio)")
+          "(RMS orientativo; solo PCM en cero se descarta como silencio)")
     return 0
 
 
@@ -1381,7 +1389,7 @@ def main() -> int:
     secuencia = audio_manifest.next_sequence(d)
     print(f"[audio] chunks de {config.AUDIO_CHUNK_SEG}s -> {audio_dir} | "
           f"auto-pausa tras {config.SILENCIO_MIN} min de silencio "
-          f"(rms<{config.SILENCIO_RMS}); visual-idle={config.VISUAL_IDLE_AUTOPAUSA}")
+          f"digital; visual-idle={config.VISUAL_IDLE_AUTOPAUSA}")
 
     silencio_seguidos = 0
     modo_actual = ""
@@ -1728,6 +1736,17 @@ def main() -> int:
                     False, reason="audio_requires_attention")
             time.sleep(1)
             continue
+        fuente_actual = str(st.get("fuente") or "sistema")
+        if fuente_actual.startswith("proceso:") and not audio_sesiones.fuente_valida(fuente_actual):
+            cerrar_capturadores()
+            if preview_publisher is not None:
+                preview_publisher.set_capture_active(False, reason="source_closed")
+            audio_sesiones.restaurar_enfoques()
+            est.actualizar_estado(
+                d, audio_capture_phase="source_closed", audio_modo="",
+                audio_warning="La aplicacion de audio se cerro. Actualiza las fuentes y selecciona una aplicacion abierta.")
+            time.sleep(1)
+            continue
         wall_start = time.time()
         monotonic_start_ns = time.monotonic_ns()
         epoch, ruta = _ruta_chunk_unica(
@@ -1766,7 +1785,8 @@ def main() -> int:
             return base
 
         try:
-            manifestar("capturing")
+            if not est.admitir_captura(d, st, lambda: manifestar("capturing")):
+                continue
             fuente = st.get("fuente", "sistema")
             picos: list[float] = []
             data = None
@@ -1800,7 +1820,7 @@ def main() -> int:
                 else:
                     audio_sesiones.restaurar_enfoques()
 
-            if (fuente in audio_sesiones.NAVEGADORES and
+            if (audio_sesiones.es_fuente_aplicacion(fuente) and
                     audio_sesiones.disponible() and
                     loopback_proceso.disponible() and
                     time.time() >= proceso_bloqueado_hasta and
@@ -1889,6 +1909,8 @@ def main() -> int:
                         modo_chunk = f"{fuente}:sin_sesion_audio"
 
             if data is None:
+                if fuente.startswith("proceso:") and not audio_sesiones.fuente_valida(fuente):
+                    raise RuntimeError("La aplicacion de audio seleccionada se cerro")
                 # Si la ruta exclusiva no se usara en este corte, no dejarla
                 # corriendo mientras el fallback acumula 90 s de buffers.
                 cerrar_proceso()
@@ -1944,7 +1966,7 @@ def main() -> int:
                 data, rate, ch, continuidad = capturador_dispositivo.leer(
                     config.AUDIO_CHUNK_SEG,
                     sonda if (
-                        fuente in audio_sesiones.NAVEGADORES
+                        audio_sesiones.es_fuente_aplicacion(fuente)
                         or preview_publisher is not None) else None,
                     inspector=watchdog.observar,
                     consumer=preview_consumer,
@@ -1956,7 +1978,7 @@ def main() -> int:
             rms = calcular_rms(data)
             peak = calcular_peak(data)
             pico_nav = max(picos) if picos else None
-            if pico_nav is None and fuente in audio_sesiones.NAVEGADORES:
+            if pico_nav is None and audio_sesiones.es_fuente_aplicacion(fuente):
                 try:
                     pico_nav = audio_sesiones.pico_navegador(fuente)
                 except Exception:
@@ -1976,7 +1998,8 @@ def main() -> int:
             st_final = est.leer_estado(d)  # pudo cambiar durante el corte
 
             clasif = clasificar_muestra_audio(
-                fuente, rms, peak, pico_nav, config.SILENCIO_RMS)
+                fuente, rms, peak, pico_nav, config.SILENCIO_RMS,
+                silencio_digital=not _pcm_no_nulo(data))
             es_silencio = bool(clasif["es_silencio"])
             # ANTI-ZOMBI: si el NAVEGADOR suena (pico alto) pero capturamos ceros,
             # la captura está rota (p. ej. FreeBuds Bluetooth reconectándose), NO es
@@ -2447,14 +2470,26 @@ def main() -> int:
             )
             continue
         except CapturaRotaTemprana as e:
+            capturador_fallido = (
+                capturador_proceso if ":proceso" in modo_chunk
+                else capturador_dispositivo)
+            parcial = None
+            extraer_parcial = getattr(capturador_fallido, "extraer_parcial", None)
+            if callable(extraer_parcial):
+                parcial = extraer_parcial()
+            parcial_util = bool(parcial and pcm_parcial_publicable(
+                parcial[0], parcial[2], config.SILENCIO_RMS))
             cerrar_capturadores()
-            terminar_preview_chunk(valid=False, reason="watchdog_pcm_flat")
+            terminar_preview_chunk(
+                valid=parcial_util,
+                reason="sealed_partial" if parcial_util else "watchdog_pcm_flat")
             if pid_chunk:
                 pid_bloqueados[int(pid_chunk)] = time.time() + 90
             proceso_bloqueado_hasta = time.time() + 90
             ruta_fallida = "proceso" if ":proceso" in modo_chunk else "dispositivo"
             salud = registrar_salud_ruta(
-                ruta_fallida, "flat", modo=modo_chunk, dispositivo=dev,
+                ruta_fallida, "partial" if parcial_util else "flat",
+                modo=modo_chunk, dispositivo=dev,
                 pid=pid_chunk, session_pid=sesion_pid_chunk,
                 rms=e.rms, peak=e.peak, session_peak=e.pico_sesion,
                 transition_cause="watchdog_pcm_flat")
@@ -2470,24 +2505,56 @@ def main() -> int:
                 ventanas=e.ventanas,
                 deteccion_seg=round(e.ventanas * watchdog.ventana_seg, 2),
             )
-            manifestar(
-                "capture_failed",
-                wall_end=time.time(),
-                monotonic_end_ns=time.monotonic_ns(),
-                reason=(
-                    "audio_requires_attention"
-                    if salud["requires_attention"] else "watchdog_pcm_flat"),
-                capture_outcome=(
-                    "requires_attention"
-                    if salud["requires_attention"] else "route_failed"),
-                route_health=salud,
-                mode=modo_chunk,
-                pid=pid_chunk,
-                rms=round(e.rms, 1),
-                peak=e.peak,
-                session_peak=e.pico_sesion,
-                watchdog_windows=e.ventanas,
-            )
+            if parcial_util:
+                parcial_data, parcial_rate, parcial_ch, parcial_continuidad = parcial
+                parcial_frames = len(parcial_data) // (parcial_ch * 2)
+                parcial_rms = calcular_rms(parcial_data)
+                parcial_peak = calcular_peak(parcial_data)
+                evento_parcial = manifestar(
+                    "sealed", publicar=False,
+                    wall_end=time.time(), monotonic_end_ns=time.monotonic_ns(),
+                    duration=parcial_frames / parcial_rate,
+                    rate=parcial_rate, channels=parcial_ch, sample_width=2,
+                    frame_count=parcial_frames,
+                    expected_frames=round(parcial_rate * config.AUDIO_CHUNK_SEG),
+                    mode=modo_chunk, pid=pid_chunk, session_pid=sesion_pid_chunk,
+                    rms=round(parcial_rms, 1), peak=parcial_peak,
+                    reason="watchdog_pcm_flat_after_partial",
+                    capture_partial=True, capture_outcome="failed_after_partial",
+                    route_health=salud, watchdog_windows=e.ventanas,
+                    **parcial_continuidad,
+                )
+                enviar_persistencia(TrabajoPersistenciaWav(
+                    ruta=ruta, data=parcial_data, rate=parcial_rate,
+                    canales=parcial_ch, manifest_event=evento_parcial,
+                    audio_log={
+                        "epoch": epoch, "parte": st.get("parte"),
+                        "archivo": ruta.name, "modo": modo_chunk,
+                        "rms": round(parcial_rms, 1), "peak": parcial_peak,
+                        "rate": parcial_rate, "canales": parcial_ch,
+                        "frame_count": parcial_frames, "capture_partial": True,
+                        **parcial_continuidad,
+                    },
+                ))
+            else:
+                manifestar(
+                    "capture_failed",
+                    wall_end=time.time(),
+                    monotonic_end_ns=time.monotonic_ns(),
+                    reason=(
+                        "audio_requires_attention"
+                        if salud["requires_attention"] else "watchdog_pcm_flat"),
+                    capture_outcome=(
+                        "requires_attention"
+                        if salud["requires_attention"] else "route_failed"),
+                    route_health=salud,
+                    mode=modo_chunk,
+                    pid=pid_chunk,
+                    rms=round(e.rms, 1),
+                    peak=e.peak,
+                    session_peak=e.pico_sesion,
+                    watchdog_windows=e.ventanas,
+                )
             reportar_audio_diag(
                 f"{nombre_fuente_audio(fuente)} suena, pero la ruta de captura esta muda",
                 f"Watchdog cambio de ruta en {e.ventanas * watchdog.ventana_seg:.1f}s "

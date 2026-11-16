@@ -215,7 +215,9 @@ def test_hijo_bloqueado_escala_a_terminate_solo_tras_timeout():
     assert sum(event[2] for event in ops.events if event[0] == "wait") <= 10.0
 
 
-def test_hijo_que_ignora_terminate_escala_a_kill_como_ultimo_recurso():
+def test_hijo_que_ignora_terminate_escala_a_kill_como_ultimo_recurso(monkeypatch):
+    # This verifies escalation budgets, not real scheduler elapsed time.
+    monkeypatch.setattr(runtime_shutdown.time, "monotonic", lambda: 100.0)
     child = _owned(103, "src.transcriptor_vivo")
     ops = FakeProcessOps(
         {103: child.root},

@@ -12,12 +12,16 @@ import os
 import time
 import uuid
 import wave
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from email.utils import parsedate_to_datetime
 from types import SimpleNamespace
 from typing import Callable, Iterable, Mapping
 
 import httpx
 import numpy as np
+
+from . import audio_silence
+from . import audio_vad
 
 
 DEFAULT_BACKEND = "remote"
@@ -174,27 +178,24 @@ def _audio_upload(audio) -> tuple[str, bytes]:
 
 
 def wav_has_useful_signal(audio, silence_rms: int = 120) -> tuple[bool, dict]:
-    """Gate conservador equivalente al capturador, antes de normalizar/WSOLA."""
-    _name, payload = _audio_upload(audio)
+    """Solo confirma silencio digital, revisando todos los canales y muestras."""
     try:
-        with wave.open(io.BytesIO(payload), "rb") as wav:
-            width, channels = wav.getsampwidth(), max(1, wav.getnchannels())
-            raw = wav.readframes(wav.getnframes())
-        if width != 2:
-            return True, {"reason": "unsupported_width", "rms": None, "peak": None}
-        samples = np.frombuffer(raw, dtype="<i2")
-        usable = samples.size - samples.size % channels
-        if usable <= 0:
+        if isinstance(audio, (str, os.PathLike)):
+            with wave.open(os.fspath(audio), "rb") as wav:
+                width = wav.getsampwidth()
+                raw = wav.readframes(wav.getnframes())
+            if width != 2:
+                return True, {"reason": "unsupported_width", "rms": None, "peak": None}
+            samples = np.frombuffer(raw, dtype="<i2").astype(np.float64)
+        else:
+            samples = np.asarray(audio, dtype=np.float64).reshape(-1) * 32767.0
+        if not np.isfinite(samples).all():
+            return True, {"reason": "unreadable", "rms": None, "peak": None}
+        if not samples.size:
             return False, {"reason": "empty", "rms": 0.0, "peak": 0}
-        mono = samples[:usable].reshape(-1, channels).astype(np.float64).mean(axis=1)
-        # Muestreo equivalente al cálculo barato del capturador.
-        probe = mono[::15] if mono.size else mono
-        rms = float(math.sqrt(float(np.mean(np.square(probe))))) if probe.size else 0.0
-        peak = int(np.max(np.abs(probe))) if probe.size else 0
-        useful = bool(
-            rms >= silence_rms
-            or (rms >= max(12.0, silence_rms * 0.25)
-                and peak >= max(100, silence_rms * 2)))
+        rms = float(math.sqrt(float(np.mean(np.square(samples)))))
+        peak = int(np.max(np.abs(samples)))
+        useful = bool(np.any(samples != 0))
         return useful, {
             "reason": "useful" if useful else "silence",
             "rms": round(rms, 3), "peak": peak,
@@ -229,7 +230,10 @@ def _retry_after(response) -> float | None:
     try:
         return max(0.0, float(value)) if value is not None else None
     except (TypeError, ValueError):
-        return None
+        try:
+            return max(0.0, parsedate_to_datetime(str(value)).timestamp() - time.time())
+        except (TypeError, ValueError, OverflowError):
+            return None
 
 
 def _error_for_http(provider: str, model: str, response,
@@ -239,12 +243,16 @@ def _error_for_http(provider: str, model: str, response,
     retryable = status in {408, 409, 425, 429, 498, 500, 502, 503, 504}
     error_class = (
         "authorization" if auth else
+        "quota_exhausted" if status == 402 else
         "quota_or_rate_limit" if status in {429, 498} else
         "server_error" if status >= 500 else "http_error")
+    retry_after = _retry_after(response)
+    if retry_after is None and status in {429, 498}:
+        retry_after = 60.0
     return RemoteSttError(
         f"{provider}: HTTP {status or 'desconocido'} ({error_class})",
         provider=provider, model=model, status_code=status or None,
-        retryable=retryable, retry_after_seconds=_retry_after(response),
+        retryable=retryable, retry_after_seconds=retry_after,
         error_class=error_class, advance_provider=not accepted,
         request_id=request_id, pending_job=accepted,
     )
@@ -680,16 +688,22 @@ class RemoteFailoverBackend:
         self.last_model = ""
         self.last_language = ""
         self.last_submitted_audio_seconds = 0.0
+        self.last_original_audio_seconds = 0.0
+        self._audio_transform = "identity-v1"
+        self._audio_transform_map: dict = {}
+        self.last_vad_diagnostics: dict = {}
         self.last_silence_diagnostics: dict = {}
         self._context: dict = {}
         self._circuits: dict[str, float] = {}
 
     def set_attempt_context(self, *, chunk_id: str, audio_sha256: str,
-                            sequence=None, history=None, recorder=None) -> None:
+                            sequence=None, history=None, recorder=None,
+                            manual_retry: bool = False) -> None:
         self._context = {
             "chunk_id": str(chunk_id), "audio_sha256": str(audio_sha256),
             "sequence": sequence, "history": list(history or []),
             "recorder": recorder,
+            "manual_retry": bool(manual_retry),
         }
         now = time.time()
         for row in self._context["history"]:
@@ -698,6 +712,12 @@ class RemoteFailoverBackend:
                 continue
             state = str(row.get("state") or row.get("status") or "")
             if state not in {"provider_failed", "cooldown"}:
+                continue
+            if (manual_retry and row.get("error_class") not in {"quota_exhausted", "rate_limit"}
+                    and row.get("status_code") not in {402, 429, 498}):
+                # Un clic nuevo vuelve a comprobar red/autorización: un 403 del
+                # firewall no debe bloquear 24 horas una conexión ya restaurada.
+                # Cuotas y Retry-After siguen respetándose.
                 continue
             retry_at = _float(row.get("retry_after"), 0)
             if retry_at > now:
@@ -725,44 +745,141 @@ class RemoteFailoverBackend:
             error_class=error_class,
             submitted_audio_seconds=round(
                 self.last_submitted_audio_seconds, 3),
+            original_audio_seconds=round(self.last_original_audio_seconds, 3),
+            audio_transform=self._audio_transform,
+            audio_transform_map=self._audio_transform_map,
+            vad_diagnostics=self.last_vad_diagnostics,
             **{k: v for k, v in extra.items() if v is not None},
         )
 
     def _resume(self, provider: _HttpProvider) -> dict:
         audio_hash = str(self._context.get("audio_sha256") or "")
-        candidates = [
+        matching = [
             row for row in self._context.get("history", [])
             if str(row.get("provider") or "") == provider.provider
+            and (not row.get("chunk_id") or str(row["chunk_id"])
+                 == str(self._context.get("chunk_id") or ""))
             and (not audio_hash or str(
                 row.get("audio_sha256") or row.get("input_sha256") or "") == audio_hash)
-            and str(row.get("state") or row.get("status") or "") in {
-                "uploaded", "accepted", "polling", "submission_unknown",
-            }
         ]
-        return dict(candidates[-1]) if candidates else {}
+        # Failed attempts must not resurrect an old upload/job. A remote
+        # completion is still recoverable: the process may have stopped before
+        # the worker committed its local transcript. Valid local commits bypass
+        # this backend entirely. Merge recovery fields only within each attempt.
+        attempts: dict[str, dict] = {}
+        for row in matching:
+            key = str(row.get("attempt_id") or "legacy")
+            attempts[key] = {**attempts.get(key, {}), **row}
+        candidates = [row for row in attempts.values()
+                      if str(row.get("state") or row.get("status") or "") not in {
+                          "complete", "provider_failed", "failed",
+                          "provider_unavailable", "cooldown", "chain_exhausted",
+                          "abandoned_by_manual_retry"}
+                      and (row.get("upload_url") or row.get("transcript_id")
+                           or row.get("job_id") or row.get("request_id")
+                           or row.get("state") in {"submission_unknown", "completed"})]
+        if not candidates:
+            return {}
+        candidate = dict(candidates[-1])
+        if (self._context.get("manual_retry")
+                and provider.provider in {"deepgram", "groq"}
+                and str(candidate.get("state") or candidate.get("status") or "")
+                in {"submission_unknown", "completed"}):
+            # Solo una acción explícita del usuario permite resolver un envío
+            # síncrono ambiguo mediante otro envío. No inventar un commit vacío.
+            recorder = self._context.get("recorder")
+            if callable(recorder):
+                recorder(
+                    status="abandoned_by_manual_retry", state="abandoned_by_manual_retry",
+                    attempt_id=str(candidate.get("attempt_id") or "legacy"),
+                    provider=provider.provider, model=provider.model,
+                    input_sha256=self._context.get("audio_sha256", ""),
+                    audio_sha256=self._context.get("audio_sha256", ""),
+                    reason="explicit_consolidation_retry", observed_at=time.time(),
+                )
+            self._context["history"].append({
+                **candidate, "status": "abandoned_by_manual_retry",
+                "state": "abandoned_by_manual_retry",
+            })
+            return {}
+        return candidate
 
     def transcribe(self, audio, **kwargs):
+        self._audio_transform = "identity-v1"
+        self._audio_transform_map = {}
+        self.last_vad_diagnostics = {}
         self.last_submitted_audio_seconds = audio_duration_seconds(audio)
+        self.last_original_audio_seconds = self.last_submitted_audio_seconds
         useful, silence_diag = wav_has_useful_signal(audio)
         self.last_silence_diagnostics = silence_diag
         if silence_diag.get("reason") == "unreadable":
             raise RemoteSttError(
                 "audio canónico ilegible; no se envió a ningún proveedor",
-                provider="local_gate", model="pcm-energy-v1",
+                provider="local_gate", model="pcm-digital-silence-v2",
                 retryable=False, error_class="invalid_audio",
                 advance_provider=False, invalid_audio=True)
         if not useful:
             self.last_provider, self.last_model, self.last_request_id = (
-                "silence_gate", "pcm-energy-v1", "")
+                "silence_gate", "pcm-digital-silence-v2", "")
             return [], SimpleNamespace(
                 language="", language_probability=1.0, request_id="",
                 provider=self.last_provider, model=self.last_model,
                 silence=True, silence_diagnostics=silence_diag)
+        # Legacy pending jobs must retain the same upload and timestamp clock.
+        # New jobs record the transform on every attempt, including polling.
+        history = [row for row in (self._context.get("history") or [])
+                   if str(row.get("chunk_id") or "") == str(self._context.get("chunk_id") or "")
+                   and str(row.get("audio_sha256") or row.get("input_sha256") or "")
+                   == str(self._context.get("audio_sha256") or "")]
+        transform = (
+            str(history[0].get("audio_transform") or "identity-v1")
+            if history else
+            (audio_vad.VERSION if os.environ.get("CLASE_STT_VAD", "silero").strip().lower()
+             not in {"0", "off", "false", "none", "digital"} else audio_silence.VERSION)
+            if os.environ.get("CLASE_STT_TRIM_SILENCE", "1") != "0"
+            else "identity-v1")
+        silence_map = None
+        saved_map = next((row.get("audio_transform_map") for row in history
+                          if row.get("audio_transform_map")), None)
+        if (transform in {audio_vad.VERSION, audio_vad.LEGACY_VERSION} or saved_map) and not isinstance(audio, (str, os.PathLike)):
+            if history:
+                try:
+                    audio, silence_map = audio_vad.restore_map(audio, saved_map or {})
+                except (ValueError, TypeError, KeyError) as error:
+                    raise RemoteSttError(
+                        "no se puede restaurar el audio pendiente: " + str(error),
+                        provider="local_gate", model=transform, retryable=False,
+                        error_class="invalid_audio_transform", advance_provider=False,
+                        invalid_audio=True) from error
+                self.last_vad_diagnostics = {"engine": transform, "reason": "persisted_map"}
+            else:
+                audio, silence_map, self.last_vad_diagnostics = audio_vad.trim(audio)
+            self._audio_transform = transform
+            self._audio_transform_map = audio_vad.serialize_map(silence_map, audio)
+            self.last_submitted_audio_seconds = audio_duration_seconds(audio)
+        elif transform in {audio_silence.VERSION, audio_silence.LEGACY_VERSION} and not isinstance(audio, (str, os.PathLike)):
+            audio, silence_map = audio_silence.trim_digital_silence(
+                audio, legacy=transform == audio_silence.LEGACY_VERSION)
+            self._audio_transform = transform
+            self.last_submitted_audio_seconds = audio_duration_seconds(audio)
+        elif history and transform not in {"identity-v1", audio_silence.VERSION}:
+            raise RemoteSttError(
+                "versión de audio pendiente desconocida; se conserva el WAV",
+                provider="local_gate", model=transform, retryable=False,
+                error_class="invalid_audio_transform", advance_provider=False,
+                invalid_audio=True)
         trace: list[dict] = []
-        for provider in self.providers:
+        # A job already accepted by a fallback owns this chunk until resolved.
+        # Retrying an earlier provider after its cooldown expires would submit
+        # the same audio twice and consume two free quotas.
+        pending = [provider for provider in self.providers
+                   if self._resume(provider)]
+        providers = pending + [provider for provider in self.providers
+                               if provider not in pending]
+        for provider in providers:
             resume = self._resume(provider)
             if (str(resume.get("state") or resume.get("status") or "")
-                    == "submission_unknown"
+                    in {"submission_unknown", "completed"}
                     and provider.provider in {"deepgram", "groq"}):
                 # APIs síncronas sin idempotency/recovery: reenviar podría cobrar
                 # dos veces. El WAV permanece pendiente para decisión explícita.
@@ -810,6 +927,12 @@ class RemoteFailoverBackend:
                         getattr(info, "request_id", provider.last_request_id) or "")
                     self.last_language = str(getattr(info, "language", "") or "")
                     segments = list(segments)
+                    if silence_map is not None:
+                        segments = [replace(
+                            segment,
+                            start=silence_map.original_time(segment.start),
+                            end=silence_map.original_time(segment.end, end=True))
+                            for segment in segments]
                     self._circuits.pop(provider.provider, None)
                     self._record(
                         "completed", attempt_id=attempt_id, provider=provider,
@@ -856,6 +979,9 @@ class RemoteFailoverBackend:
                     cooldown_until = None
                     if error.error_class == "authorization":
                         cooldown_until = time.time() + 24 * 3600
+                    elif error.error_class == "quota_exhausted":
+                        cooldown_until = time.time() + max(
+                            3600.0, float(error.retry_after_seconds or 0))
                     elif error.retryable and (
                             number >= self.max_attempts_per_provider
                             or float(error.retry_after_seconds or 0)

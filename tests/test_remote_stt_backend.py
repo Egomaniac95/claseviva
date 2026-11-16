@@ -98,6 +98,31 @@ def test_gate_conservador_no_descarta_voz_baja():
     assert diagnostics["peak"] >= 240
 
 
+@pytest.mark.parametrize("amplitude", [1 / 32768, 0.0001, 0.0007])
+def test_gate_keeps_signal_below_old_rms_threshold(amplitude):
+    useful, _ = stt_backend.wav_has_useful_signal(_tone(amplitude=amplitude))
+    assert useful
+
+
+def test_gate_checks_every_sample_and_preserves_opposite_channels(tmp_path):
+    from src.compat_av import cargar_wav16k
+
+    stereo = np.zeros((16000, 2), dtype="<i2")
+    stereo[1:100, 0] = 15
+    stereo[1:100, 1] = -15
+    path = tmp_path / "opposite.wav"
+    with wave.open(str(path), "wb") as wav:
+        wav.setnchannels(2)
+        wav.setsampwidth(2)
+        wav.setframerate(16000)
+        wav.writeframes(stereo.tobytes())
+    assert stt_backend.wav_has_useful_signal(path)[0]
+    assert np.any(cargar_wav16k(path))
+    isolated = np.zeros(16000, dtype=np.float32)
+    isolated[1] = 1 / 32768
+    assert stt_backend.wav_has_useful_signal(isolated)[0]
+
+
 def test_failover_es_secuencial_y_commit_metadata_usa_ganador():
     first = _Provider("assemblyai", error=stt_backend.RemoteSttError(
         "safe", provider="assemblyai", model="a", status_code=429,

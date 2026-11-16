@@ -112,6 +112,19 @@ def _costo(fila: dict) -> float:
         return 0.0
 
 
+def _no_estimable(fila: dict) -> float:
+    """Un cargo desconocido no es gratuito aunque no entre en la suma numérica."""
+    detail = fila.get("estimacion_costo") or {}
+    return float(
+        fila.get("costo_usd") is None
+        or (isinstance(detail, dict) and detail.get("estado") == "no_disponible")
+    )
+
+
+def _historico_sin_tarifa(fila: dict) -> float:
+    return float("estimacion_costo" not in fila and fila.get("costo_usd") is not None)
+
+
 def _en_rango(fila: dict, rango: tuple[float, float]) -> bool:
     try:
         instante = float(fila.get("t", 0.0))
@@ -162,8 +175,9 @@ class _UsageCostIndex:
     sumas prefijas; no obligan a recorrer el historial en cada refresco.
     """
 
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, value_of=_costo):
         self.path = Path(path)
+        self.value_of = value_of
         self.reader = incremental_jsonl.reader_for(self.path)
         self._lock = threading.RLock()
         self._reader_version = -1
@@ -198,7 +212,7 @@ class _UsageCostIndex:
         self.aggregate_rebuilds += 1
 
     def _index_row(self, row: dict) -> None:
-        cost = _costo(row)
+        cost = self.value_of(row)
         course = str(row.get("curso") or "")
         class_path = str(row.get("clase_path") or "")
         class_id = str(row.get("clase_id") or "")
@@ -324,12 +338,16 @@ _USAGE_INDEXES_LOCK = threading.RLock()
 _USAGE_INDEXES: dict[str, _UsageCostIndex] = {}
 
 
-def _usage_index(path: Path) -> _UsageCostIndex:
-    key = str(path.resolve())
+def _usage_index(path: Path, measure: str = "cost") -> _UsageCostIndex:
+    # Todos comparten el reader append-only; sólo indexan filas nuevas. Mantener
+    # las mismas reglas de atribución impide desalinear el importe y su calidad.
+    value_of = {"cost": _costo, "unknown": _no_estimable,
+                "legacy": _historico_sin_tarifa}[measure]
+    key = str(path.resolve()) + ("" if measure == "cost" else "|" + measure)
     with _USAGE_INDEXES_LOCK:
         index = _USAGE_INDEXES.get(key)
         if index is None:
-            index = _UsageCostIndex(path)
+            index = _UsageCostIndex(path, value_of=value_of)
             _USAGE_INDEXES[key] = index
         return index
 
@@ -366,6 +384,10 @@ def resumen_curso(
     clases = _clases(curso, ahora)
     index = _usage_index(config.LOGS_DIR / "uso_api.jsonl")
     index.refresh()
+    unknown = _usage_index(config.LOGS_DIR / "uso_api.jsonl", "unknown")
+    historical = _usage_index(config.LOGS_DIR / "uso_api.jsonl", "legacy")
+    unknown.refresh()
+    historical.refresh()
     total_curso = index.course_total(curso, clases)
     lecciones = []
     actual_resuelta = clase_actual.resolve() if clase_actual is not None else None
@@ -379,6 +401,8 @@ def resumen_curso(
             "estado": st.get("estado", ""),
             "inicio": rango[0], "fin": rango[1], "activa": activa,
             "costo_usd": round(costo, 6),
+            "costos_no_estimables": int(unknown.class_total(d, st, rango)),
+            "costos_historicos_sin_tarifa": int(historical.class_total(d, st, rango)),
         })
     costo_actual = next(
         (item["costo_usd"] for item in lecciones if item["activa"]), 0.0)
@@ -387,4 +411,11 @@ def resumen_curso(
         "total_usd": round(total_curso, 6),
         "clase_actual_usd": round(costo_actual, 6),
         "lecciones": lecciones,
+        "costos_son_estimaciones": True,
+        "costos_no_estimables": int(unknown.course_total(curso, clases)),
+        "costos_historicos_sin_tarifa": int(historical.course_total(curso, clases)),
+        "clase_actual_no_estimables": next(
+            (item["costos_no_estimables"] for item in lecciones if item["activa"]), 0),
+        "clase_actual_historicos_sin_tarifa": next(
+            (item["costos_historicos_sin_tarifa"] for item in lecciones if item["activa"]), 0),
     }

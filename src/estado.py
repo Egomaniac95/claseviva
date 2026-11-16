@@ -118,7 +118,7 @@ def crear_clase(nombre: str, semana: int | None = None,
         "auto_pausa_motivo": "",
         "visual_idle": {},
         "monitor": None,       # override del monitor de captura (None = config/env)
-        "fuente": "sistema",   # de dónde sale el audio: chrome | msedge | sistema
+        "fuente": "sistema",   # sistema | proceso:<pid>:<nacimiento_ms> | alias legacy
         "dispositivo": "",     # loopback WASAPI preferido (vacio = salida default)
         "audio_modo": "",      # diagnostico: proceso | dispositivo | fallback
         "audio_ultimo_estado": "",  # activo | silencio | captura_rota; vacío = desconocido
@@ -409,6 +409,22 @@ def capturando_visual(st: dict) -> bool:
 def escuchando_audio(st: dict) -> bool:
     """True si el capturador puede intentar audio sin una accion manual previa."""
     return estado_efectivo(st) in {"grabando_activo", "auto_pausado"}
+
+
+def admitir_captura(d: Path, esperado: dict, registrar) -> bool:
+    """Ordena inicio de adquisición y Pausa/Fin bajo el mismo bloqueo.
+
+    El callback solo registra el inicio, nunca lee audio ni llama APIs. Una pausa
+    que ya ganó el bloqueo no puede dejar una adquisición fantasma posterior.
+    """
+    with _bloqueo_estado(d):
+        actual = leer_estado(d)
+        if not escuchando_audio(actual) or any(
+                actual.get(key) != esperado.get(key)
+                for key in ("parte", "velocidad", "fuente")):
+            return False
+        registrar()
+        return True
 
 
 def _marca_transicion(st: dict, tipo: str, ahora: float, nota: str) -> dict:

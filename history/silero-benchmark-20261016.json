@@ -1,0 +1,574 @@
+{
+  "samples": [
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_04_clase-3/audio/chunk_001785592656_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 30.0,
+      "compute_sec": 0.47558529999878374,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 0,
+        "removed_seconds": 0.0
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_04_clase-3/audio/chunk_001785593077_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 24.280625,
+      "vad_sec": 24.704,
+      "compute_sec": 0.22816539999985253,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 1,
+        "removed_seconds": 5.296
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_04_clase-3/audio/chunk_001785593707_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 30.0,
+      "compute_sec": 0.22707100000116043,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 0,
+        "removed_seconds": 0.0
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_04_clase-3/audio/chunk_001785594128_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 28.624,
+      "compute_sec": 0.13118000000031316,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 1,
+        "removed_seconds": 1.376
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_04_clase-3/audio/chunk_001785594548_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 30.0,
+      "compute_sec": 0.14985199999864562,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 0,
+        "removed_seconds": 0.0
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_04_clase-3/audio/chunk_001785594968_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 30.0,
+      "compute_sec": 0.13270859999829554,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 0,
+        "removed_seconds": 0.0
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_04_clase-3/audio/chunk_001785595359_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 30.0,
+      "compute_sec": 0.1345426999978372,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 0,
+        "removed_seconds": 0.0
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_04_clase-3/audio/chunk_001785595779_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 30.0,
+      "compute_sec": 0.1318104999991192,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 0,
+        "removed_seconds": 0.0
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_04_clase-3/audio/chunk_001785596199_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 30.0,
+      "compute_sec": 0.13758859999870765,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 0,
+        "removed_seconds": 0.0
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_04_clase-3/audio/chunk_001785596590_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 30.0,
+      "compute_sec": 0.1319125999980315,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 0,
+        "removed_seconds": 0.0
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_04_clase-3/audio/chunk_001785597010_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 30.0,
+      "compute_sec": 0.13296120000086376,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 0,
+        "removed_seconds": 0.0
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_04_clase-3/audio/chunk_001785597430_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 30.0,
+      "compute_sec": 0.13494019999779994,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 0,
+        "removed_seconds": 0.0
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_04_clase-3/audio/chunk_001785599071_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 30.0,
+      "compute_sec": 0.1351161000020511,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 0,
+        "removed_seconds": 0.0
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_04_clase-3/audio/chunk_001785599461_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 30.0,
+      "compute_sec": 0.13033980000182055,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 0,
+        "removed_seconds": 0.0
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_04_clase-3/audio/chunk_001785599882_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 30.0,
+      "compute_sec": 0.1326097999990452,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 0,
+        "removed_seconds": 0.0
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_04_clase-3/audio/chunk_001785600302_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 30.0,
+      "compute_sec": 0.1303206999982649,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 0,
+        "removed_seconds": 0.0
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_04_clase-3/audio/chunk_001785600692_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 30.0,
+      "compute_sec": 0.13067880000016885,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 0,
+        "removed_seconds": 0.0
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_05_clase-semana-4/audio/chunk_001786200071_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 28.624,
+      "compute_sec": 0.1331331000001228,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 1,
+        "removed_seconds": 1.376
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_05_clase-semana-4/audio/chunk_001786200559_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 26.416,
+      "compute_sec": 0.13185130000056233,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 1,
+        "removed_seconds": 3.584
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_05_clase-semana-4/audio/chunk_001786201041_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 30.0,
+      "compute_sec": 0.13142829999924288,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 0,
+        "removed_seconds": 0.0
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_05_clase-semana-4/audio/chunk_001786201489_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 30.0,
+      "compute_sec": 0.13184289999844623,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 0,
+        "removed_seconds": 0.0
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_05_clase-semana-4/audio/chunk_001786203746_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 28.112,
+      "compute_sec": 0.13130739999905927,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 1,
+        "removed_seconds": 1.888
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_05_clase-semana-4/audio/chunk_001786204166_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 28.624,
+      "compute_sec": 0.13401999999769032,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 1,
+        "removed_seconds": 1.376
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_05_clase-semana-4/audio/chunk_001786204586_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 24.08,
+      "compute_sec": 0.12940429999798653,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 2,
+        "removed_seconds": 5.92
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_05_clase-semana-4/audio/chunk_001786204977_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 28.496,
+      "compute_sec": 0.1301822000023094,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 1,
+        "removed_seconds": 1.504
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_05_clase-semana-4/audio/chunk_001786205397_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 28.272,
+      "compute_sec": 0.1318446999976004,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 1,
+        "removed_seconds": 1.728
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_05_clase-semana-4/audio/chunk_001786205817_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 26.544,
+      "compute_sec": 0.13357730000279844,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 2,
+        "removed_seconds": 3.456
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_05_clase-semana-4/audio/chunk_001786206208_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 30.0,
+      "compute_sec": 0.1327841999991506,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 0,
+        "removed_seconds": 0.0
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_05_clase-semana-4/audio/chunk_001786206628_p1_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 26.0,
+      "compute_sec": 0.13371720000213827,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 1,
+        "removed_seconds": 4.0
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_05_clase-semana-4/audio/chunk_001786219882_p2_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 30.0,
+      "compute_sec": 0.13248880000173813,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 0,
+        "removed_seconds": 0.0
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_05_clase-semana-4/audio/chunk_001786220302_p2_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 28.528,
+      "compute_sec": 0.13273840000329074,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 1,
+        "removed_seconds": 1.472
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_05_clase-semana-4/audio/chunk_001786220692_p2_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 30.0,
+      "compute_sec": 0.130650399998558,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 0,
+        "removed_seconds": 0.0
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_05_clase-semana-4/audio/chunk_001786221113_p2_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 30.0,
+      "compute_sec": 0.13634190000084345,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 0,
+        "removed_seconds": 0.0
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_05_clase-semana-4/audio/chunk_001786221533_p2_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 30.0,
+      "compute_sec": 0.13152850000187755,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 0,
+        "removed_seconds": 0.0
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_05_clase-semana-4/audio/chunk_001786221923_p2_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 30.0,
+      "compute_sec": 0.131848799999716,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 0,
+        "removed_seconds": 0.0
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_05_clase-semana-4/audio/chunk_001786222344_p2_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 30.0,
+      "compute_sec": 0.1324678999990283,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 0,
+        "removed_seconds": 0.0
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_05_clase-semana-4/audio/chunk_001786222764_p2_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 28.08,
+      "compute_sec": 0.13129639999897336,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 1,
+        "removed_seconds": 1.92
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_05_clase-semana-4/audio/chunk_001786223184_p2_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 30.0,
+      "compute_sec": 0.13330219999988913,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 0,
+        "removed_seconds": 0.0
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_05_clase-semana-4/audio/chunk_001786223575_p2_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 30.0,
+      "vad_sec": 30.0,
+      "compute_sec": 0.13442310000027646,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 0,
+        "removed_seconds": 0.0
+      }
+    },
+    {
+      "file": "contenido/maestria-inteligencia-artificial/clases/CLASE_05_clase-semana-4/audio/chunk_001786223995_p2_v10.wav",
+      "before_sec": 30.0,
+      "digital_sec": 16.4135,
+      "vad_sec": 14.656,
+      "compute_sec": 0.13467529999979888,
+      "diagnostics": {
+        "engine": "silero-6.2.3-conservative-v1",
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "reason": "ok",
+        "cuts": 2,
+        "removed_seconds": 15.344
+      }
+    }
+  ],
+  "network_calls": 0,
+  "sample_count": 40,
+  "before_sec": 1200.0,
+  "digital_sec": 1180.694125,
+  "vad_sec": 1149.76,
+  "compute_sec": 5.854237899991858,
+  "reason_counts": {
+    "ok": 40
+  },
+  "saved_percent": 4.186666666666667
+}

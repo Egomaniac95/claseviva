@@ -751,16 +751,22 @@ def transcribir_chunk(modelo, ruta: Path, contexto: str = "",
     epoch_nombre, parte, vel = _partes_ruta_chunk(ruta)
     epoch = float(epoch_nombre if inicio_abs is None else inicio_abs)
     datos = cargar_wav16k(ruta)
-    # El gate usa el PCM derivado directamente del WAV canónico, antes de que
-    # normalización o WSOLA puedan elevar ruido y provocar una petición facturable.
-    useful, silence_diag = stt_backend.wav_has_useful_signal(datos)
+    # El gate revisa todos los canales del WAV canónico antes de que el mezclado
+    # o remuestreo puedan cancelar señal; solo el cero digital confirma silencio.
+    useful, silence_diag = stt_backend.wav_has_useful_signal(ruta)
     if not useful:
         modelo.last_provider = "silence_gate"
-        modelo.last_model = "pcm-energy-v1"
+        modelo.last_model = "pcm-digital-silence-v2"
         modelo.last_request_id = ""
         modelo.last_submitted_audio_seconds = 0.0
         modelo.last_silence_diagnostics = silence_diag
         return []
+    if not np.any(datos):
+        raise stt_backend.RemoteSttError(
+            "el WAV contiene señal pero el audio remuestreado quedó vacío",
+            provider="local_gate", model="pcm-digital-silence-v2",
+            retryable=False, error_class="invalid_audio_transform",
+            advance_provider=False, invalid_audio=True)
     if vel > 1.01:
         datos = estirar_wsola(datos, vel, sr=16000)
     # Referencia al derivado post-WSOLA sin solape: es lo que un recompute del

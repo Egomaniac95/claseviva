@@ -1,0 +1,148 @@
+{
+  "wav_total": 310,
+  "wav_con_rms_util": 310,
+  "metricas_wav_desde_manifest": 310,
+  "metricas_wav_recalculadas": 0,
+  "wav_silenciosos": 0,
+  "wav_util_sin_transcript": [
+    {
+      "archivo": "chunk_001786201628_p1_v10.wav",
+      "t": 1800.9130036830902,
+      "t_original": 1786201628.0,
+      "rms": 1126.8,
+      "peak": 11969,
+      "useful_audio": true
+    },
+    {
+      "archivo": "chunk_001786201663_p1_v10.wav",
+      "t": 1835.9130036830902,
+      "t_original": 1786201663.0,
+      "rms": 1119.0,
+      "peak": 10904,
+      "useful_audio": true
+    }
+  ],
+  "wav_sin_transcript": [],
+  "wav_sin_transcript_total": 0,
+  "commits_vacios": [],
+  "commits_vacios_total": 0,
+  "stt_invalidos_total": 0,
+  "transcript_wav_faltante": [],
+  "transcript_wav_faltante_total": 0,
+  "segmentos_total": 1798,
+  "rango_transcript": {
+    "inicio": 1.0060641765594482,
+    "fin": 9607.092865571976
+  },
+  "gap_max_segundos": 251.88,
+  "gap_max_fmt": "04:12",
+  "cobertura_estado": "dudosa",
+  "limpieza_segura": false,
+  "advertencias": [
+    "hay periodos con muchas capturas y sin transcript cercano",
+    "hay WAV con RMS util sin transcript cercano; se difiere limpieza",
+    "continuidad PCM con deficit o gaps; se difiere limpieza"
+  ],
+  "origen": {
+    "origen": "vivo",
+    "inicio": 1786199827.0869963,
+    "intervalos_utiles": [
+      [
+        1786199827.0869963,
+        1786201757.5592673
+      ],
+      [
+        1786201858.2366724,
+        1786201896.4030852
+      ],
+      [
+        1786202844.6399274,
+        1786202935.352486
+      ],
+      [
+        1786203625.9044313,
+        1786206747.5437872
+      ],
+      [
+        1786219581.1369514,
+        1786224145.795708
+      ]
+    ]
+  },
+  "continuidad_audio": {
+    "status": "warning",
+    "source": "manifest",
+    "chunks": 310,
+    "coverage_intervals": 349,
+    "reference_rate": 44100,
+    "deficit_frames": 0,
+    "deficit_seconds": 0.0,
+    "explicit_gap_frames": 0,
+    "explicit_gap_seconds": 0.0,
+    "declared_silence_frames": 51597000,
+    "declared_silence_seconds": 1170.0,
+    "qpc_inferred_gap_frames": 3399737,
+    "qpc_inferred_silence_seconds": 77.091542,
+    "data_discontinuity_packets": 0,
+    "terminal_discontinuities": 0,
+    "capture_failure_events": 0,
+    "terminal_capture_failures": 0,
+    "paused_capture_failures": 0,
+    "paused_capture_failure_details": [],
+    "recovered_capture_failures": 0,
+    "terminal_capture_failure_details": [],
+    "recovered_capture_failure_details": [],
+    "unfinished_capture_count": 0,
+    "terminal_unfinished_capture_count": 0,
+    "active_unfinished_capture_count": 0,
+    "unfinished_capture_details": [],
+    "wall_gap_total_seconds": 13187.778927,
+    "wall_gap_p95_seconds": 12836.66592,
+    "wall_gap_max_seconds": 12836.66592,
+    "declared_inactive_gap_seconds": 925.919231,
+    "declared_inactive_intervals": [
+      [
+        1786201757.559267,
+        1786201858.236672
+      ],
+      [
+        1786201896.403085,
+        1786202844.639927
+      ],
+      [
+        1786202935.352486,
+        1786203625.904431
+      ],
+      [
+        1786206747.543787,
+        1786219581.136951
+      ],
+      [
+        1786224145.795708,
+        1786228816.613366
+      ]
+    ],
+    "boundaries_flagged": [
+      {
+        "previous": "chunk_001786201732_p1_v10.wav",
+        "current": "chunk_001786201858_p1_v10.wav",
+        "wall_gap_seconds": 351.113007,
+        "source": "pcm_wall",
+        "declared_inactivity": false,
+        "resume_startup_seconds": 0.0,
+        "pause_silence_drain_seconds": 0.0,
+        "approximate": false
+      },
+      {
+        "previous": "chunk_001786206718_p1_v10.wav",
+        "current": "chunk_001786219581_p2_v10.wav",
+        "wall_gap_seconds": 12836.66592,
+        "source": "pcm_wall",
+        "declared_inactivity": false,
+        "resume_startup_seconds": 0.0,
+        "pause_silence_drain_seconds": 0.0,
+        "approximate": false
+      }
+    ]
+  }
+}

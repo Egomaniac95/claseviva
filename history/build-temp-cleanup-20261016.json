@@ -1,0 +1,41 @@
+﻿{
+    "kind":  "completed_build_and_tests_temporary_files",
+    "paths":  [
+                  {
+                      "path":  "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\dist\\ClaseViva-build-20261016",
+                      "files":  442,
+                      "bytes":  356594336
+                  },
+                  {
+                      "path":  "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\.qa-tmp-portable-extract",
+                      "files":  442,
+                      "bytes":  356594336
+                  },
+                  {
+                      "path":  "C:\\Users\\famil\\AppData\\Local\\Temp\\ClaseViva\\build-6fc5bd6009c243a9a5ed70fa976b62ae",
+                      "files":  12345,
+                      "bytes":  474651592
+                  },
+                  {
+                      "path":  "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\src\\__pycache__",
+                      "files":  74,
+                      "bytes":  3975287
+                  },
+                  {
+                      "path":  "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\tests\\__pycache__",
+                      "files":  59,
+                      "bytes":  2803238
+                  },
+                  {
+                      "path":  "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\scripts\\__pycache__",
+                      "files":  9,
+                      "bytes":  157331
+                  },
+                  {
+                      "path":  "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\.ruff_cache",
+                      "files":  5,
+                      "bytes":  806
+                  }
+              ],
+    "bytes_removed":  1194776926
+}

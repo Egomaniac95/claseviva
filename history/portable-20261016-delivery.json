@@ -1,0 +1,128 @@
+{
+  "zip": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\dist\\ClaseViva-Portable.zip",
+  "bytes": 154417578,
+  "sha256": "862e5a8a8938d77c14f19d521154740d3e73aab2e47a7e31b466c1c16a15e269",
+  "files": 441,
+  "unpacked_bytes": 356509699,
+  "extracted_verified": true,
+  "self_test": {
+    "ok": true,
+    "frozen": true,
+    "checks": {
+      "onnxruntime": {
+        "ok": true
+      },
+      "src.captura_audio": {
+        "ok": true
+      },
+      "src.captura_pantalla": {
+        "ok": true
+      },
+      "src.escriba": {
+        "ok": true
+      },
+      "src.transcriptor_vivo": {
+        "ok": true
+      },
+      "src.panel": {
+        "ok": true
+      },
+      "src.post_procesar": {
+        "ok": true
+      },
+      "av": {
+        "ok": true
+      },
+      "pyaudiowpatch": {
+        "ok": true
+      },
+      "pycaw.pycaw": {
+        "ok": true
+      },
+      "winrt.windows.media.ocr": {
+        "ok": true
+      },
+      "httpx": {
+        "ok": true
+      },
+      "markdown": {
+        "ok": true
+      },
+      "markdown.extensions.tables": {
+        "ok": true
+      },
+      "markdown.extensions.fenced_code": {
+        "ok": true
+      },
+      "markdown.extensions.sane_lists": {
+        "ok": true
+      },
+      "latex2mathml.converter": {
+        "ok": true
+      },
+      "ddgs": {
+        "ok": true
+      },
+      "cv2": {
+        "ok": true
+      },
+      "shapely": {
+        "ok": true
+      },
+      "pyclipper": {
+        "ok": true
+      },
+      "rapidocr_onnxruntime": {
+        "ok": true
+      },
+      "lesson_render": {
+        "ok": true,
+        "heading": true,
+        "table": true,
+        "code": true,
+        "mathml": true,
+        "image": true,
+        "metadata_hidden": true,
+        "complete": true
+      },
+      "pdfium_render": {
+        "ok": true
+      },
+      "icon": {
+        "ok": true
+      },
+      "ocr_models": {
+        "ok": true
+      },
+      "silero_vad": {
+        "ok": true,
+        "model_sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3",
+        "providers": [
+          "CPUExecutionProvider"
+        ]
+      }
+    }
+  },
+  "workers": {
+    "captura_audio": {
+      "ok": true,
+      "exit_code": 1,
+      "reason": "no_active_class"
+    },
+    "captura_pantalla": {
+      "ok": true,
+      "exit_code": 1,
+      "reason": "no_active_class"
+    },
+    "transcriptor_vivo": {
+      "ok": true,
+      "exit_code": 1,
+      "reason": "no_active_class"
+    },
+    "escriba": {
+      "ok": true,
+      "exit_code": 1,
+      "reason": "no_active_class"
+    }
+  }
+}

@@ -420,6 +420,15 @@ def continuity_report(target: str | Path,
     """
     canonical_records = capture_records(target)
     events = read_events(target)
+    # Retain the first acquisition request, not the later sealed/STT event.
+    # A resumed stream may start after the manual-pause polling tick (1 s).
+    acquisition_requests: dict[str, float] = {}
+    for event in events:
+        if event.get("status") == "capturing":
+            chunk_id = str(event.get("chunk_id") or "")
+            requested_at = _float(event.get("observed_at"), 0.0)
+            if chunk_id and requested_at > 0:
+                acquisition_requests.setdefault(chunk_id, requested_at)
     if events:
         latest = latest_by_chunk(target)
         records = sorted(
@@ -450,6 +459,27 @@ def continuity_report(target: str | Path,
         for start, end in (declared_inactive_intervals or [])
         if float(end) > float(start)
     ]
+    # A process stopped while already paused can leave an acquisition request
+    # without PCM. It is not missing speech. Keep the raw failure report intact;
+    # contextual continuity discounts only this narrowly proven interruption.
+    paused_failures = []
+    latest_events = latest_by_chunk_rows(events)
+    for failure in capture_failures["terminal_chunks"]:
+        row = latest_events.get(failure["chunk_id"], {})
+        requested = acquisition_requests.get(failure["chunk_id"])
+        observed = _float(failure.get("observed_at"), 0)
+        if (
+            failure["reason"] == "abandoned_capture_without_valid_wav"
+            and failure["error_type"] == "CaptureProcessInterrupted"
+            and requested is not None
+            and not row.get("frame_count") and not row.get("bytes")
+            and any(start <= requested <= end
+                    and end <= observed <= end + 1.25
+                    for start, end in declared_intervals)
+        ):
+            paused_failures.append(failure)
+    terminal_capture_failures = (
+        capture_failures["terminal_count"] - len(paused_failures))
     declared_silence_frames = 0
     for index, row in enumerate(records):
         rate = max(0, int(_float(row.get("rate"), 0)))
@@ -510,6 +540,47 @@ def continuity_report(target: str | Path,
                 for start, end in declared_intervals
             )
         )
+        resume_startup_seconds = 0.0
+        pause_silence_drain_seconds = 0.0
+        if gap > 0 and not same_stream and not declared_inactivity:
+            requested_at = acquisition_requests.get(str(row.get("chunk_id") or ""))
+            for start, end in declared_intervals:
+                previous_request = acquisition_requests.get(
+                    str(previous.get("chunk_id") or ""))
+                previous_rate = _float(previous.get("rate"), 0)
+                previous_duration = (
+                    _float(previous.get("frame_count"), 0) / previous_rate
+                    if previous_rate > 0 else 0)
+                silence_drained_across_pause = bool(
+                    previous.get("status") == "discarded_silence"
+                    and previous_request is not None
+                    and previous_duration > 0
+                    and previous_request <= start <= previous_request + previous_duration + tolerance
+                    and start - tolerance <= _float(previous.get("observed_at"), 0)
+                    <= previous_request + previous_duration + tolerance
+                )
+                # Do not expand the general gap tolerance. Only account for a
+                # proven new-stream acquisition after a recorded resume: one
+                # polling tick + scheduling slack, then bounded stream opening.
+                # Missing acquisition evidence, old streams and longer delays
+                # remain unexplained gaps and continue blocking cleanup.
+                if (
+                    (start <= previous_end_wall + tolerance
+                     or silence_drained_across_pause)
+                    and end >= previous_end_wall
+                    and requested_at is not None
+                    and 0 <= requested_at - end <= 1.25
+                    and 0 <= current_start_wall - requested_at <= tolerance
+                    and previous.get("stream_id")
+                    and row.get("stream_id")
+                    and previous["stream_id"] != row["stream_id"]
+                    and row.get("start_frame") == 0
+                ):
+                    declared_inactivity = True
+                    resume_startup_seconds = current_start_wall - end
+                    if silence_drained_across_pause:
+                        pause_silence_drain_seconds = max(0.0, start - previous_end_wall)
+                    break
         if gap > 0 and declared_inactivity:
             declared_inactive_gap_seconds += gap
         elif gap > 0:
@@ -522,6 +593,8 @@ def continuity_report(target: str | Path,
             "wall_gap_seconds": round(gap, 6),
             "source": boundary_source,
             "declared_inactivity": declared_inactivity,
+            "resume_startup_seconds": round(resume_startup_seconds, 6),
+            "pause_silence_drain_seconds": round(pause_silence_drain_seconds, 6),
             "approximate": bool(
                 previous.get("inferred_legacy") or row.get("inferred_legacy")),
         })
@@ -533,7 +606,7 @@ def continuity_report(target: str | Path,
     p95_index = max(0, math.ceil(len(sorted_gaps) * 0.95) - 1)
     wall_gap_p95 = sorted_gaps[p95_index] if sorted_gaps else 0.0
     warning = (
-        capture_failures["terminal_count"] > 0
+        terminal_capture_failures > 0
         or unfinished["terminal_count"] > 0
         or explicit_gap_frames > 0
         or data_discontinuity_packets > 0
@@ -561,9 +634,13 @@ def continuity_report(target: str | Path,
         "data_discontinuity_packets": data_discontinuity_packets,
         "terminal_discontinuities": terminal_discontinuities,
         "capture_failure_events": capture_failures["failure_events"],
-        "terminal_capture_failures": capture_failures["terminal_count"],
+        "terminal_capture_failures": terminal_capture_failures,
+        "paused_capture_failures": len(paused_failures),
+        "paused_capture_failure_details": paused_failures,
         "recovered_capture_failures": capture_failures["recovered_count"],
-        "terminal_capture_failure_details": capture_failures["terminal_chunks"],
+        "terminal_capture_failure_details": [
+            failure for failure in capture_failures["terminal_chunks"]
+            if failure not in paused_failures],
         "recovered_capture_failure_details": capture_failures["recovered_chunks"],
         "unfinished_capture_count": unfinished["count"],
         "terminal_unfinished_capture_count": unfinished["terminal_count"],

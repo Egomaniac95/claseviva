@@ -11,7 +11,10 @@ import time
 import uuid
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+from . import app_paths
+
+RESOURCE_DIR = app_paths.resource_root()
+ROOT = app_paths.data_root()
 # contenido/<curso>/ = material pesado POR CURSO (multi-curso: una sola app para toda la
 # maestría; ya no hace falta copiarla por curso). memoria_cursos.md = historial ligero global.
 CONTENIDO_DIR = ROOT / "contenido"
@@ -62,12 +65,17 @@ def _cargar_env() -> None:
     env = ROOT / ".env"
     if not env.is_file():
         return
-    for linea in env.read_text(encoding="utf-8").splitlines():
+    for linea in env.read_text(encoding="utf-8-sig").splitlines():
         linea = linea.strip()
         if not linea or linea.startswith("#") or "=" not in linea:
             continue
         k, _, v = linea.partition("=")
-        os.environ.setdefault(k.strip(), v.strip())
+        k, v = k.strip(), v.strip()
+        if not k or not k.replace("_", "a").isalnum() or k[0].isdigit():
+            continue
+        if len(v) >= 2 and v[0] == v[-1] and v[0] in {"'", '"'}:
+            v = v[1:-1]
+        os.environ.setdefault(k, v)
 
 
 _cargar_env()
@@ -75,10 +83,11 @@ _cargar_env()
 # --- API DeepSeek ---
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY", "")
 DEEPSEEK_BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
-# OJO: 'deepseek-chat' queda DEPRECADO el 2026-07-24. El nombre vigente es 'deepseek-v4-flash'.
-DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash")
-COSTO_ENTRADA_USD_M = 0.14   # USD por millón de tokens; revisar al cambiar proveedor.
-COSTO_SALIDA_USD_M = 0.28
+# Alias vigente; el alias anterior sigue aceptado por el proveedor (2026-09-14).
+DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-flash")
+# Compatibilidad de importación; el cálculo real versionado usa provider_pricing.
+COSTO_ENTRADA_USD_M = 0.30
+COSTO_SALIDA_USD_M = 1.20
 
 # --- Transcripción ---
 # es | en | auto — 'auto' detecta el idioma POR CHUNK (clases mixtas español/inglés):
@@ -126,7 +135,7 @@ def stt_runtime_dir() -> Path | None:
 BLOQUE_SEG = int(os.environ.get("CLASE_BLOQUE_SEG", "300"))
 
 # --- Auto-pausa por silencio (break/receso: no almacenar nada hasta que vuelva el audio) ---
-SILENCIO_RMS = int(os.environ.get("CLASE_SILENCIO_RMS", "120"))       # RMS int16 bajo = silencio
+SILENCIO_RMS = int(os.environ.get("CLASE_SILENCIO_RMS", "120"))       # diagnóstico; no autoriza descartar PCM no nulo
 SILENCIO_MIN = float(os.environ.get("CLASE_SILENCIO_MIN", "2"))       # minutos seguidos de silencio
 SILENCIO_CHUNKS = max(1, round(SILENCIO_MIN * 60 / AUDIO_CHUNK_SEG))
 VISUAL_IDLE_AUTOPAUSA = os.environ.get("CLASE_VISUAL_IDLE_AUTOPAUSA", "1").lower() not in {
@@ -576,7 +585,10 @@ def instancia_unica(nombre: str, *, modulo: str = "", class_dir=None) -> bool:
             "create_time": creado,
             "nombre": nombre,
             "module": str(modulo or nombre),
-            "command": f"{Path(sys.executable).name} -m {modulo or nombre}",
+            "command": (
+                " ".join(app_paths.worker_command(modulo))
+                if modulo in app_paths.WORKER_MODULES
+                else f"{Path(sys.executable).name} -m {modulo or nombre}"),
             "class_dir": str(Path(class_dir).resolve()) if class_dir else "",
             "started_at": ahora,
             "heartbeat": ahora,

@@ -128,7 +128,7 @@ def _aislar_panel(monkeypatch, tmp_path: Path) -> Path:
     return estado.crear_clase("Panel runtime", curso="curso-h11")
 
 
-def _cerrar_con_wav_y_fallo_terminal(d: Path) -> None:
+def _cerrar_con_wav_y_fallo_terminal(d: Path, *, confirmar_stt=True) -> None:
     wav_path = d / "audio" / "chunk_000000000100_p1_v10.wav"
     wav_path.parent.mkdir(parents=True, exist_ok=True)
     with wave.open(str(wav_path), "wb") as wav:
@@ -149,13 +149,14 @@ def _cerrar_con_wav_y_fallo_terminal(d: Path) -> None:
         "frame_count": 100,
         "transactional_stt_required": True,
     })
-    audio_manifest.commit_transcript_chunk(
-        d, wav_path.stem, [{"t": 100.0, "texto": "contenido", "parte": 1}], {
-            "path": wav_path.name,
-            "sequence": 1,
-            "wall_start": 100.0,
-            "input_sha256": sha256,
-        })
+    if confirmar_stt:
+        audio_manifest.commit_transcript_chunk(
+            d, wav_path.stem, [{"t": 100.0, "texto": "contenido", "parte": 1}], {
+                "path": wav_path.name,
+                "sequence": 1,
+                "wall_start": 100.0,
+                "input_sha256": sha256,
+            })
     audio_manifest.append_event(d, {
         "chunk_id": "chunk_000000000101_p1_v10",
         "status": "capture_failed",
@@ -199,6 +200,32 @@ def test_cierre_degradado_habilita_consolidar_sin_mutar_estado(
     assert aceptado["ok"] is True
     assert len(iniciados) == 1
     panel._POST_CORRIENDO = False
+
+
+@pytest.mark.parametrize("leccion_previa", [False, True])
+def test_fin_con_audio_pendiente_muestra_lista_y_permite_consolidar(
+        monkeypatch, tmp_path, leccion_previa):
+    d = _aislar_panel(monkeypatch, tmp_path)
+    _cerrar_con_wav_y_fallo_terminal(d, confirmar_stt=False)
+    if leccion_previa:
+        (d / "leccion_final.md").write_text("Edición anterior", encoding="utf-8")
+    state_before = (d / "session_state.json").read_bytes()
+    started = []
+    monkeypatch.setattr(panel, "_POST_CORRIENDO", False)
+    monkeypatch.setattr(panel, "_POST_ERROR", "")
+    monkeypatch.setattr(panel, "_iniciar_worker_post", lambda target: started.append(target))
+    client = panel.app.test_client()
+
+    ui = client.get("/api/estado").get_json()
+    accepted = client.post("/api/consolidar", json={}).get_json()
+
+    assert ui["post_titulo"] == "Lista para consolidar"
+    assert ui["post_estado"] == "pendiente"
+    assert "Audios pendientes: 1" in ui["post_mensaje"] and "API" in ui["post_mensaje"]
+    assert ui["consolidation_ready"] and not ui["shutdown_blocking"]
+    assert ui["consolidation_status"] == "ready_to_recover_stt"
+    assert accepted["ok"] and len(started) == 1
+    assert (d / "session_state.json").read_bytes() == state_before
 
 
 def test_cierre_incompleto_mantiene_consolidar_bloqueado(

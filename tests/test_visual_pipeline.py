@@ -160,7 +160,7 @@ def test_heartbeat_referencia_jpeg_sin_duplicarlo(monkeypatch, tmp_path):
             estable, img_dir, log_path, epoch=10, parte=1,
             ultimo_hash=None, ultimo_archivo=None, umbral=6))
     assert cambio is True
-    assert len(list(img_dir.glob("*.jpg"))) == 1
+    assert len(list(img_dir.glob("*.webp"))) == 1
 
     ultimo_hash, ultimo_archivo, ultimo_ocr, ultimo_t, cambio = (
         captura_pantalla.registrar_observacion_visual(
@@ -168,7 +168,7 @@ def test_heartbeat_referencia_jpeg_sin_duplicarlo(monkeypatch, tmp_path):
             ultimo_hash=ultimo_hash, ultimo_archivo=ultimo_archivo,
             ultimo_ocr=ultimo_ocr, ultimo_guardado_t=ultimo_t, umbral=6))
     assert cambio is False
-    assert len(list(img_dir.glob("*.jpg"))) == 1
+    assert len(list(img_dir.glob("*.webp"))) == 1
 
     captura_pantalla.registrar_fin_visual(
         timeline_path, epoch=14, parte=1, ultimo_hash=ultimo_hash,
@@ -204,7 +204,7 @@ def test_cache_ocr_ejecuta_una_vez_por_estado_visual_estable(
     assert cache.misses == 1
     assert cache.hits == 1
     assert cache.captures_avoided == 1
-    assert len(list(img_dir.glob("*.jpg"))) == 1
+    assert len(list(img_dir.glob("*.webp"))) == 1
 
 
 def test_productor_guarda_formula_distinta_con_mismo_dhash(monkeypatch, tmp_path):
@@ -230,7 +230,7 @@ def test_productor_guarda_formula_distinta_con_mismo_dhash(monkeypatch, tmp_path
             ultimo_guardado_t=guardado_t))
 
     assert guardada is True
-    assert len(list(img_dir.glob("*.jpg"))) == 2
+    assert len(list(img_dir.glob("*.webp"))) == 2
     assert [fila["ocr"] for fila in _filas(log_path)] == ["x = 1", "x = 2"]
     assert "ocr_cambio" in _filas(log_path)[1]["motivo"]
 
@@ -790,7 +790,9 @@ def test_lotes_protegidos_suplementarios_son_deterministicos_sin_llm(
                     "## LECCION_COMPLETA_DUPLICADA\n"
                     "Explicacion transcript-first repetida indebidamente.\n"
                     + markers)
-            return markers
+            # Una respuesta primaria completa evita activar el reintento de
+            # desarrollo breve; aquí se verifica el flujo de imágenes extra.
+            return "## Desarrollo\n\n" + transcript[0]["texto"] + "\n\n" + markers
         return msgs[-1]["content"]
 
     monkeypatch.setattr(post_procesar, "preguntar_cacheado", fake_preguntar)
@@ -803,6 +805,8 @@ def test_lotes_protegidos_suplementarios_son_deterministicos_sin_llm(
     assert len(chunk_calls) == 1
     assert "TRANSCRIPCION FILTRADA DEL RANGO" in chunk_calls[0]["user"]
     assert chunk_calls[0]["system"] == post_procesar.PROMPT_SLIDE_GUIDED
+    assert all(call["system"] != post_procesar.PROMPT_SLIDES_SUPLEMENTARIAS
+               for call in llamadas)
     assert post_procesar.consolidar_parte.ultimo_reporte["llamadas_llm_reales"] == 2
     final = destino.read_text(encoding="utf-8")
     assert all(f"img/densa_{i:02d}.jpg" in final for i in range(13))

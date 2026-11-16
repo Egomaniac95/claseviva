@@ -529,7 +529,7 @@ def test_gate_rechaza_encabezados_nucleo_sin_desarrollo(monkeypatch):
     assert any(m.startswith("faltan_secciones_nucleo=") for m in motivos)
 
 
-def test_reintento_de_escriba_es_unico_compacto_y_sin_thinking(monkeypatch):
+def test_reintento_de_escriba_conserva_evidencia_completa_sin_thinking(monkeypatch):
     llamadas = []
 
     def fake_detalle(messages, **kwargs):
@@ -553,7 +553,8 @@ def test_reintento_de_escriba_es_unico_compacto_y_sin_thinking(monkeypatch):
 
     monkeypatch.setenv("CLASE_ESCRIBA_WEB", "0")
     monkeypatch.setattr(escriba, "preguntar_detalle", fake_detalle)
-    transcript = "SENTINEL_NUEVO " + ("evidencia técnica extensa " * 900)
+    transcript = ("SENTINEL_NUEVO " + ("evidencia técnica extensa " * 220)
+                  + " SENTINEL_CENTRAL " + ("evidencia técnica extensa " * 220))
 
     resultado = escriba.generar_resumen_en_vivo(
         transcript, "OCR_IMPORTANTE " * 200, "00:00:00–00:05:00",
@@ -564,11 +565,56 @@ def test_reintento_de_escriba_es_unico_compacto_y_sin_thinking(monkeypatch):
     assert [call[1]["thinking"] for call in llamadas] == [False, False]
     assert llamadas[1][1]["etiqueta"] == "escriba-reintento-compacto"
     assert llamadas[1][1]["max_tokens"] == 1800
-    assert len(llamadas[1][0][-1]["content"]) <= 9800
-    assert len(llamadas[1][0][-1]["content"]) < len(llamadas[0][0][-1]["content"])
+    assert len(llamadas[1][0][-1]["content"]) <= escriba.MAX_PROMPT_USUARIO_CHARS
+    assert transcript in llamadas[1][0][-1]["content"]
+    assert "OCR_IMPORTANTE " * 200 in llamadas[1][0][-1]["content"]
     assert "SENTINEL_CONTEXTO_PREVIO" in llamadas[1][0][-1]["content"]
     assert "SENTINEL_CONTEXTO_PREVIO" in resultado["cuerpo"]
     assert "Transcripción cruda preservada" not in resultado["cuerpo"]
+
+
+def test_tramo_extenso_se_procesa_completo_en_bloques_acotados(monkeypatch):
+    transcript = " ".join(f"concepto_{i}" for i in range(5000))
+    ocr = "\n".join(f"formula_{i}" for i in range(1500))
+    llamadas = []
+
+    def generar(texto, pantallas, rango, contexto):
+        llamadas.append((texto, pantallas, rango, contexto))
+        return {
+            "estado": "generado", "msg": "Generado", "motivos": [],
+            "cuerpo": f"Desarrollo {len(llamadas)}",
+            "estado_pedagogico": f"Contexto {len(llamadas)}",
+        }
+
+    monkeypatch.setattr(escriba, "_generar_ficha_bloque", generar)
+    resultado = escriba.generar_resumen_en_vivo(transcript, ocr, "00:00–15:00", "Previo")
+    assert "".join(llamada[0] for llamada in llamadas) == transcript
+    assert "".join(llamada[1] for llamada in llamadas) == ocr
+    assert all(len(texto) <= escriba.MAX_TRANSCRIPT_RESUMEN_CHARS
+               and len(pantallas) <= escriba.MAX_OCR_RESUMEN_CHARS
+               for texto, pantallas, _, _ in llamadas)
+    assert resultado["estado"] == "generado"
+    assert resultado["cuerpo"] == "\n\n".join(
+        f"Desarrollo {i + 1}" for i in range(len(llamadas)))
+    assert llamadas[0][3] == "Previo"
+    assert llamadas[-1][3] == f"Contexto {len(llamadas) - 1}"
+
+
+def test_bloque_incompleto_impide_confirmar_tramo_extenso(monkeypatch):
+    llamadas = []
+
+    def generar(*_args):
+        llamadas.append(True)
+        return {
+            "estado": "generado" if len(llamadas) == 1 else "parcial",
+            "msg": "Resultado", "motivos": [], "cuerpo": "Texto",
+            "estado_pedagogico": "Contexto",
+        }
+
+    monkeypatch.setattr(escriba, "_generar_ficha_bloque", generar)
+    resultado = escriba.generar_resumen_en_vivo("voz " * 10000, "", "00:00–15:00")
+    assert resultado["estado"] == "parcial"
+    assert len(llamadas) == 2
 
 
 def test_respuesta_vacia_tiene_un_solo_rescate_compacto(monkeypatch):
@@ -1367,8 +1413,9 @@ def test_fin_relee_reloj_despues_de_espera_e_incluye_ultima_frase(
     assert reloj["ultimo_final_t"] == 1731.0
 
 
-def test_fin_con_timeout_declara_pendiente_y_no_avanza_cursores(
-        monkeypatch, tmp_path):
+@pytest.mark.parametrize("deferred", [False, True])
+def test_fin_con_stt_pendiente_no_publica_ni_avanza_cursores(
+        monkeypatch, tmp_path, deferred):
     d = tmp_path / "clase"
     _crear_sesion(d)
     estado.actualizar_estado(d, estado="fin")
@@ -1386,7 +1433,8 @@ def test_fin_con_timeout_declara_pendiente_y_no_avanza_cursores(
     _parchar_main(monkeypatch, d, clock)
     monkeypatch.setattr(escriba, "_esperar_transcriptor_fin", lambda _d: {
         "ready": False,
-        "timed_out": True,
+        "timed_out": not deferred,
+        "deferred_to_consolidation": deferred,
         "status": "waiting_stt",
         "pending_stt_count": 1,
         "pending_stt_chunks": ["chunk_pendiente"],
@@ -1405,8 +1453,8 @@ def test_fin_con_timeout_declara_pendiente_y_no_avanza_cursores(
         "auto_anchor_t": 1000.0,
     }
     assert st_final["resumen_estado"] == "pendiente"
-    assert "timeout" in st_final["resumen_msg"].lower()
-    assert st_final["cierre_stt"]["timed_out"] is True
+    assert ("Consolidar" if deferred else "timeout") in st_final["resumen_msg"]
+    assert st_final["cierre_stt"]["timed_out"] is not deferred
 
 
 def test_espera_transcriptor_reporta_timeout_sin_sleeps(monkeypatch, tmp_path):

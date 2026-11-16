@@ -6,8 +6,8 @@ apariciones por rasgos locales/OCR y registra su procedencia en un manifest sepa
 """
 from __future__ import annotations
 
-import hashlib
 import difflib
+import hashlib
 import json
 import os
 import re
@@ -23,6 +23,7 @@ from xml.etree import ElementTree
 
 from PIL import Image, ImageChops, ImageFilter, ImageOps, ImageStat
 
+from .image_optimization import encode_webp
 
 SCHEMA_VERSION = 1
 MANIFEST_NAME = "visual_material_manifest.json"
@@ -172,7 +173,7 @@ def _save_clean_page(image: Image.Image, target: Path) -> str:
     if max(image.size) > 1800:
         image.thumbnail((1800, 1800), Image.Resampling.LANCZOS)
     tmp = target.with_name(target.stem + ".tmp" + target.suffix)
-    image.save(tmp, "JPEG", quality=94, optimize=True, progressive=False)
+    tmp.write_bytes(encode_webp(image, prefer_lossless=True))
     os.replace(tmp, target)
     return _sha256(target)
 
@@ -420,7 +421,7 @@ def preparar_materiales_oficiales(
                 page_number, image, text = item[:3]
                 renderer = item[3] if len(item) > 3 else {}
                 filename = (
-                    f"material_oficial_{source_sha[:12]}_p{page_number:04d}.jpg"
+                    f"material_oficial_{source_sha[:12]}_p{page_number:04d}.webp"
                 )
                 image_sha = _save_clean_page(image, img_dir / filename)
                 material_id = f"{source_sha}:p{page_number:04d}"

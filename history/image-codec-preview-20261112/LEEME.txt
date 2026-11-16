@@ -1,0 +1,3 @@
+Se conserva una sola muestra original y su WebP 85 para comparar calidad.
+El resto de variantes experimentales se retiró durante la limpieza del proyecto.
+La biblioteca de clases ya fue convertida a WebP 85 por autorización del usuario.

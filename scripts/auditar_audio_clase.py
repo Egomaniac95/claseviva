@@ -15,11 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src import audio_manifest, estado, transcript_quality
-from src.captura_audio import (
-    PCM_CASI_CERO_PEAK,
-    PCM_CASI_CERO_RMS,
-    metricas_wav,
-)
+from src.captura_audio import metricas_wav
 
 
 def _leer_jsonl(path: Path) -> list[dict]:
@@ -57,14 +53,11 @@ def auditar(clase: Path, transcript_oficial: Path | None = None) -> dict:
     utiles = mudos = pendientes = 0
     for wav in wavs:
         met = metricas_wav(wav)
-        casi_mudo = (
-            met["rms"] <= PCM_CASI_CERO_RMS
-            and int(met["peak"]) <= PCM_CASI_CERO_PEAK
-        )
+        silencio_digital = not met["useful_audio"]
         transcrito = wav.stem in chunks_transcritos
         if met["useful_audio"]:
             utiles += 1
-        if casi_mudo:
+        if silencio_digital:
             mudos += 1
         if not transcrito:
             pendientes += 1
@@ -75,7 +68,8 @@ def auditar(clase: Path, transcript_oficial: Path | None = None) -> dict:
             "rms": round(float(met["rms"]), 2),
             "peak": int(met["peak"]),
             "useful_audio": bool(met["useful_audio"]),
-            "casi_mudo": casi_mudo,
+            "silencio_digital": silencio_digital,
+            "casi_mudo": silencio_digital,  # alias de compatibilidad del reporte JSON
             "transcrito": transcrito,
         })
     continuidad = audio_manifest.continuity_report(clase)
@@ -96,6 +90,7 @@ def auditar(clase: Path, transcript_oficial: Path | None = None) -> dict:
         "clase": str(clase),
         "wav_total": len(wavs),
         "wav_utiles": utiles,
+        "wav_silencio_digital": mudos,
         "wav_casi_mudos": mudos,
         "wav_pendientes": pendientes,
         "transcript_segmentos": len(transcript),
@@ -116,13 +111,14 @@ def auditar(clase: Path, transcript_oficial: Path | None = None) -> dict:
 
 
 def reporte_md(res: dict) -> str:
+    silenciosos = res.get("wav_silencio_digital", res.get("wav_casi_mudos", 0))
     lineas = [
         "# Auditoria de audio",
         "",
         f"- Clase: `{res['clase']}`",
         f"- WAV total: {res['wav_total']}",
         f"- WAV utiles: {res['wav_utiles']}",
-        f"- WAV casi mudos: {res['wav_casi_mudos']}",
+        f"- WAV con silencio digital: {silenciosos}",
         f"- WAV pendientes o inválidos de STT: {res['wav_pendientes']}",
         f"- Segmentos transcript: {res['transcript_segmentos']}",
         f"- Chunks con commit STT completo: {res['chunks_transcritos']}",
@@ -149,14 +145,14 @@ def reporte_md(res: dict) -> str:
         f"{res.get('replay', {}).get('replayed_segments', 0)} segmento(s); "
         "el transcript canónico no se modifica",
         "",
-        "| WAV | dur_s | rms | peak | util | casi_mudo | transcrito |",
+        "| WAV | dur_s | rms | peak | util | silencio_digital | transcrito |",
         "|---|---:|---:|---:|---|---|---|",
     ]
     for f in res["filas"]:
         lineas.append(
             f"| {f['archivo']} | {f['duration_sec']} | {f['rms']} | {f['peak']} | "
             f"{'si' if f['useful_audio'] else 'no'} | "
-            f"{'si' if f['casi_mudo'] else 'no'} | "
+            f"{'si' if f.get('silencio_digital', f.get('casi_mudo')) else 'no'} | "
             f"{'si' if f['transcrito'] else 'no'} |"
         )
     fallos_terminales = res["continuidad"].get(
@@ -207,8 +203,8 @@ def reporte_md(res: dict) -> str:
         ])
     reasons = []
     continuity = res["continuidad"]
-    if res.get("wav_casi_mudos"):
-        reasons.append(f"WAV casi mudos: {res['wav_casi_mudos']}")
+    if silenciosos:
+        reasons.append(f"WAV con silencio digital: {silenciosos}")
     if res.get("wav_pendientes"):
         reasons.append(f"WAV sin commit STT: {res['wav_pendientes']}")
     if res.get("commits_vacios"):

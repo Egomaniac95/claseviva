@@ -394,6 +394,63 @@ def test_gap_fisico_fuera_de_pausa_sigue_bloqueando(tmp_path):
     assert reporte["declared_inactive_gap_seconds"] == 0.0
 
 
+@pytest.mark.parametrize("requested,stream,frame,explicit,expected", [
+    (230.99, "new", 0, 0, "ok"),
+    (None, "new", 0, 0, "warning"),
+    (228.0, "new", 0, 0, "warning"),
+    (231.4, "new", 0, 0, "warning"),
+    (230.0, "new", 0, 0, "warning"),
+    (230.99, "old", 13107, 0, "warning"),
+    (230.99, "new", 100, 0, "warning"),
+    (230.99, "new", 0, 50, "warning"),
+])
+def test_resume_poll_and_stream_open_require_provenance(
+        tmp_path, requested, stream, frame, explicit, expected):
+    """A delayed consolidation must not confuse a closed pause with lost PCM."""
+    audio_manifest.append_event(tmp_path, {
+        "chunk_id": "before", "status": "discarded_silence", "sequence": 1,
+        "rate": 100, "frame_count": 1000, "expected_frames": 1000,
+        "pcm_wall_start": 100.0, "pcm_wall_end": 110.0,
+        "stream_id": "old", "start_frame": 0, "end_frame": 1000,
+    })
+    if requested is not None:
+        audio_manifest.append_event(tmp_path, {
+            "chunk_id": "after", "status": "capturing", "sequence": 2,
+            "observed_at": requested,
+        })
+    audio_manifest.append_event(tmp_path, {
+        "chunk_id": "after", "status": "sealed", "sequence": 2,
+        "rate": 100, "frame_count": 1000, "expected_frames": 1000,
+        "pcm_wall_start": 231.07, "pcm_wall_end": 241.07,
+        "stream_id": stream, "start_frame": frame, "end_frame": frame + 1000,
+        "gap_frames": explicit,
+    })
+    report = audio_manifest.continuity_report(
+        tmp_path, declared_inactive_intervals=[(109.0, 230.0)])
+    assert report["status"] == expected
+    if expected == "ok":
+        assert report["wall_gap_total_seconds"] == 0
+        assert report["declared_inactive_gap_seconds"] == 121.07
+        assert report["boundaries"][0]["resume_startup_seconds"] == 1.07
+        assert post_procesar._wav_limpieza_segura_por_chunks({
+            "wav_total": 1, "continuidad_audio": report,
+        })
+
+
+def test_resume_without_closed_pause_still_blocks(tmp_path):
+    for name, start, stream in (("before", 100.0, "a"), ("after", 231.07, "b")):
+        audio_manifest.append_event(tmp_path, {
+            "chunk_id": name, "status": "capturing", "observed_at": start - 0.1,
+        })
+        audio_manifest.append_event(tmp_path, {
+            "chunk_id": name, "status": "sealed", "rate": 100,
+            "frame_count": 1000, "expected_frames": 1000,
+            "pcm_wall_start": start, "pcm_wall_end": start + 10,
+            "stream_id": stream, "start_frame": 0, "end_frame": 1000,
+        })
+    assert audio_manifest.continuity_report(tmp_path)["status"] == "warning"
+
+
 def test_silencio_descartado_declara_cobertura_sin_convertirse_en_wav_stt(tmp_path):
     clase = tmp_path / "clase"
     audio_manifest.append_event(clase, {
@@ -665,6 +722,62 @@ def test_barrera_y_cobertura_usan_commit_vacio_como_terminado(tmp_path):
     assert auditoria["commits_vacios"] == 1
 
 
+def test_paquete_ligero_admite_solo_wav_vacios_con_commit_valido():
+    cobertura = {
+        "wav_total": 2,
+        "wav_sin_transcript_total": 0,
+        "transcript_wav_faltante_total": 0,
+        "continuidad_audio": {"status": "ok"},
+        "wav_util_sin_transcript": [
+            {"archivo": "completado_sin_voz.wav"},
+            {"archivo": "sin_commit.wav"},
+        ],
+        "commits_vacios": ["completado_sin_voz.wav"],
+    }
+    assert not post_procesar._wav_limpieza_segura_por_chunks(cobertura)
+    cobertura["wav_util_sin_transcript"].pop()
+    assert post_procesar._wav_limpieza_segura_por_chunks(cobertura)
+
+
+def test_paquete_ligero_bloquea_pendientes_e_invalidos_con_advertencia_pcm():
+    cobertura = {
+        "wav_total": 1,
+        "wav_sin_transcript_total": 1,
+        "transcript_wav_faltante_total": 0,
+        "continuidad_audio": {"status": "ok"},
+        "wav_util_sin_transcript": [{"archivo": "chunk.wav"}],
+        "commits_vacios": ["chunk.wav"],
+    }
+    assert not post_procesar._wav_limpieza_segura_por_chunks(cobertura)
+    cobertura.update({"wav_sin_transcript_total": 0,
+                      "stt_invalidos_total": 1,
+                      "continuidad_audio": {"status": "warning"}})
+    assert not post_procesar._wav_limpieza_segura_por_chunks(cobertura)
+    cobertura["stt_invalidos_total"] = 0
+    assert post_procesar._wav_limpieza_segura_por_chunks(cobertura)
+    cobertura["transcript_wav_faltante_total"] = 1
+    assert not post_procesar._wav_limpieza_segura_por_chunks(cobertura)
+
+
+def test_paquete_ligero_admite_audio_procesado_con_cuatro_fallos_historicos():
+    cobertura = {
+        "wav_total": 721,
+        "wav_sin_transcript_total": 0,
+        "stt_invalidos_total": 0,
+        "transcript_wav_faltante_total": 0,
+        "limpieza_segura": False,
+        "cobertura_estado": "parcial",
+        "continuidad_audio": {
+            "status": "warning", "terminal_capture_failures": 4,
+            "wall_gap_max_seconds": 51.939,
+        },
+    }
+    assert post_procesar._wav_limpieza_segura_por_chunks(cobertura)
+    warning = post_procesar._cobertura_estudiante_md(cobertura)
+    assert "4 interrupciones" in warning
+    assert "51.9 segundos" in warning
+
+
 def test_cobertura_reusa_metricas_manifest_despues_de_barrera_verificada(
         monkeypatch, tmp_path):
     clase = tmp_path / "clase"
@@ -694,6 +807,25 @@ def test_cobertura_reusa_metricas_manifest_despues_de_barrera_verificada(
     assert cobertura["wav_con_rms_util"] == 1
     assert cobertura["metricas_wav_desde_manifest"] == 1
     assert cobertura["metricas_wav_recalculadas"] == 0
+
+
+def test_cobertura_verifica_silencio_legacy_con_wav_real(tmp_path):
+    clase = tmp_path / "clase"
+    wav = clase / "audio" / "chunk_000000000100_p1_v10.wav"
+    _wav(wav, 100)
+    sha256 = hashlib.sha256(wav.read_bytes()).hexdigest()
+    audio_manifest.append_event(clase, {
+        "chunk_id": wav.stem, "status": "sealed", "sequence": 1,
+        "path": wav.name, "sha256": sha256, "rms": 0, "peak": 0,
+        "duration": 1.0, "transactional_stt_required": True,
+    })
+    audio_manifest.commit_transcript_chunk(
+        clase, wav.stem, [], {"path": wav.name, "input_sha256": sha256})
+    coverage = post_procesar.analizar_cobertura_audio(
+        clase, [], [], {"origen": "vivo", "inicio": 100.0}, manifest_verificado=True)
+    assert coverage["wav_con_rms_util"] == 1
+    assert coverage["metricas_wav_desde_manifest"] == 0
+    assert coverage["metricas_wav_recalculadas"] == 1
 
 
 def test_parcial_legacy_no_cuenta_como_commit_con_manifest(tmp_path):

@@ -224,6 +224,39 @@ def test_reloj_cliente_interpola_cada_segundo_sin_aumentar_polling():
     assert "return 2000;" not in page
 
 
+def test_reloj_sin_clase_no_avanza_y_pausa_solo_detiene_tiempo_util():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node no está disponible para validar el reloj")
+    match = re.search(
+        r"(?s)(function formatElapsed\(.*?\n})\nfunction scheduleRefresh", panel.PAGINA)
+    assert match is not None
+    script = """
+let CLOCK_ANCHOR=null, now=0;
+const performance={now:()=>now}, values={};
+const document={hidden:false,getElementById:(id)=>(values[id]??={textContent:'-'})};
+""" + match.group(1) + """
+anclarRelojLocal({estado_efectivo:'sin_clase'});
+now=4000;actualizarRelojLocal();
+if(CLOCK_ANCHOR!==null||Object.keys(values).length)process.exit(1);
+anclarRelojLocal({clase_id:'fixture',estado_efectivo:'grabando_activo',
+ elapsed_wall_sec:100,recorded_elapsed_sec:60});
+now=5000;actualizarRelojLocal();
+if(values.duracion.textContent!=='00:01:01')process.exit(2);
+anclarRelojLocal({clase_id:'fixture',estado_efectivo:'pausado_manual',
+ elapsed_wall_sec:101,recorded_elapsed_sec:61});
+now=6000;actualizarRelojLocal();
+if(values.duracion.textContent!=='00:01:01'||values.tiempo_pared.textContent!=='00:01:42')process.exit(3);
+anclarRelojLocal({clase_id:'fixture',estado_efectivo:'finalizado',
+ elapsed_wall_sec:102,recorded_elapsed_sec:61});
+now=10000;actualizarRelojLocal();
+if(values.tiempo_pared.textContent!=='00:01:42')process.exit(4);
+"""
+    result = subprocess.run((node, "-"), input=script, text=True,
+                            capture_output=True, encoding="utf-8", timeout=15)
+    assert result.returncode == 0, result.stderr
+
+
 def test_cache_panel_no_repite_loader_si_firma_no_cambio(monkeypatch):
     panel._panel_cache_clear()
     calls = []

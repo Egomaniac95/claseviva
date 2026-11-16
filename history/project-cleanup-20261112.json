@@ -1,0 +1,60 @@
+{
+  "root": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva",
+  "removed": [
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\dist",
+      "bytes": 514517390,
+      "files": 487,
+      "reason": "portable antiguo duplicado y reproducible"
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\.cache\\image-codecs",
+      "bytes": 998559,
+      "files": 4,
+      "reason": "herramienta JPEG sustituida por WebP"
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\.pytest_cache",
+      "bytes": 49348,
+      "files": 5,
+      "reason": "cache de desarrollo regenerable"
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\.ruff_cache",
+      "bytes": 2850,
+      "files": 11,
+      "reason": "cache de desarrollo regenerable"
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\.hypothesis",
+      "bytes": 68362,
+      "files": 53,
+      "reason": "cache de desarrollo regenerable"
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\src\\__pycache__",
+      "bytes": 1983783,
+      "files": 43,
+      "reason": "cache de desarrollo regenerable"
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\tests\\__pycache__",
+      "bytes": 3007721,
+      "files": 62,
+      "reason": "cache de desarrollo regenerable"
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\scripts\\__pycache__",
+      "bytes": 181527,
+      "files": 10,
+      "reason": "cache de desarrollo regenerable"
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\history\\image-codec-preview-20261112",
+      "bytes": 1289884,
+      "files": 6,
+      "reason": "variantes experimentales descartadas; se conserva original y WebP 85"
+    }
+  ],
+  "removed_artifact_bytes": 522099424
+}

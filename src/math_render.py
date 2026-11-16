@@ -5,7 +5,14 @@ import html
 import re
 
 
-_CODE_SPLIT = re.compile(r"(```[\s\S]*?```|`[^`\n]+`)")
+_CODE_SPANS = re.compile(
+    r"^[ \t]{0,3}(?P<ticks>`{3,})(?!`)[^\n]*\n"
+    r"[\s\S]*?(?:^[ \t]{0,3}(?P=ticks)`*[ \t]*(?:\n|\Z)|\Z)"
+    r"|^[ \t]{0,3}(?P<tildes>~{3,})(?!~)[^\n]*\n"
+    r"[\s\S]*?(?:^[ \t]{0,3}(?P=tildes)~*[ \t]*(?:\n|\Z)|\Z)"
+    r"|(?P<inline>`+)(?!`)[^\n]*?(?<!`)(?P=inline)(?!`)",
+    re.MULTILINE,
+)
 _BLOCK = re.compile(r"\\\[([\s\S]*?)\\\]")
 _INLINE = re.compile(r"\\\((.+?)\\\)")
 _LATEX_SIGNAL = re.compile(
@@ -26,23 +33,32 @@ def _normalizar_fragmento(text: str) -> str:
         body = match.group(1).strip()
         return r"\[" + body + r"\]" if _LATEX_SIGNAL.search(body) else match.group(0)
 
-    text = re.sub(r"(?<!\\)\[\s*([^\[\]\n]{1,1000}?)\s*\]", bad_block, text)
+    text = re.sub(r"(?<![\\!])\[\s*([^\[\]\n]{1,1000}?)\s*\](?!\()", bad_block, text)
 
     # Igual para expresiones inline como ``(y_i)``; la señal evita tocar prosa.
     def bad_inline(match: re.Match) -> str:
         body = match.group(1).strip()
         return r"\(" + body + r"\)" if _LATEX_SIGNAL.search(body) else match.group(0)
 
-    return re.sub(r"(?<!\\)\(([^()\n]{1,300})\)", bad_inline, text)
+    # A Markdown destination may contain underscores or query parameters with
+    # '='. They are URL syntax, not algebra; preserve image and link boundaries.
+    return re.sub(r"(?<![\\\]])\(([^()\n]{1,300})\)", bad_inline, text)
+
+
+def _fuera_del_codigo(text: str, transform) -> str:
+    """Aplica una transformación solo fuera de fences y código inline."""
+    pieces = []
+    cursor = 0
+    for match in _CODE_SPANS.finditer(text):
+        pieces.extend((transform(text[cursor:match.start()]), match.group(0)))
+        cursor = match.end()
+    pieces.append(transform(text[cursor:]))
+    return "".join(pieces)
 
 
 def normalizar_matematica_markdown(text: str) -> str:
     """Estandariza delimitadores sin modificar bloques/código inline."""
-    pieces = _CODE_SPLIT.split(str(text or ""))
-    return "".join(
-        piece if index % 2 else _normalizar_fragmento(piece)
-        for index, piece in enumerate(pieces)
-    )
+    return _fuera_del_codigo(str(text or ""), _normalizar_fragmento)
 
 
 def _mathml(latex: str, *, block: bool) -> str:
@@ -86,11 +102,7 @@ def protect_math(text: str) -> tuple[str, dict[str, str]]:
         return _INLINE.sub(
             lambda match: token(match.group(1), block=False), piece)
 
-    pieces = _CODE_SPLIT.split(normalized)
-    protected = "".join(
-        piece if index % 2 else protect_piece(piece)
-        for index, piece in enumerate(pieces)
-    )
+    protected = _fuera_del_codigo(normalized, protect_piece)
     return protected, replacements
 
 

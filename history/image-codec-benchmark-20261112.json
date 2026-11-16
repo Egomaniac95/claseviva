@@ -1,0 +1,2937 @@
+{
+  "sample_count": 39,
+  "sampling": "25th, 50th and 90th file-size quantile in each img directory",
+  "settings": {
+    "webp_lossless": "lossless=True, quality=80 (effort), method=4, exact=True",
+    "avif_lossless": "avifenc --lossless --speed 6 --jobs 2",
+    "jxl": "JPEG coefficient transcoding, Brotli effort 11, encoder effort 9 and 10",
+    "jpegoptim": "--stdout --strip-none --all-progressive",
+    "avif_q80_444": "Pillow quality=80, speed=6, subsampling=4:4:4",
+    "avif_q70_444": "Pillow quality=70, speed=6, subsampling=4:4:4"
+  },
+  "source": "JPEG already optimized with MozJPEG; additional savings use this baseline",
+  "source_sample_bytes": 5073823,
+  "summary": {
+    "jpegoptim_lossless": {
+      "sample_bytes": 4990653,
+      "change_pct": -1.64,
+      "pixels_equal_all": true,
+      "median_encode_seconds": 0.1452,
+      "mean_psnr_db": null
+    },
+    "webp_lossless": {
+      "sample_bytes": 14785834,
+      "change_pct": 191.41,
+      "pixels_equal_all": true,
+      "median_encode_seconds": 1.1304,
+      "mean_psnr_db": null
+    },
+    "webp_q95": {
+      "sample_bytes": 5035222,
+      "change_pct": -0.76,
+      "pixels_equal_all": false,
+      "median_encode_seconds": 0.648,
+      "mean_psnr_db": 47.01
+    },
+    "webp_q85": {
+      "sample_bytes": 2934654,
+      "change_pct": -42.16,
+      "pixels_equal_all": false,
+      "median_encode_seconds": 0.5131,
+      "mean_psnr_db": 42.814
+    },
+    "avif_q90_444": {
+      "sample_bytes": 4642853,
+      "change_pct": -8.49,
+      "pixels_equal_all": false,
+      "median_encode_seconds": 0.6975,
+      "mean_psnr_db": 48.797
+    },
+    "avif_lossless": {
+      "sample_bytes": 22835775,
+      "change_pct": 350.07,
+      "pixels_equal_all": true,
+      "median_encode_seconds": 2.2074,
+      "mean_psnr_db": null
+    },
+    "jxl_jpeg_reconstruction_e9": {
+      "sample_bytes": 4113596,
+      "change_pct": -18.93,
+      "pixels_equal_all": true,
+      "median_encode_seconds": 1.0409,
+      "mean_psnr_db": null,
+      "original_jpeg_recovered_all": true
+    },
+    "jxl_jpeg_reconstruction_e10": {
+      "sample_bytes": 4115789,
+      "change_pct": -18.88,
+      "pixels_equal_all": true,
+      "median_encode_seconds": 1.0817,
+      "mean_psnr_db": null,
+      "original_jpeg_recovered_all": true
+    },
+    "avif_q80_444": {
+      "sample_bytes": 3460855,
+      "change_pct": -31.79,
+      "pixels_equal_all": false,
+      "median_encode_seconds": 0.8885,
+      "mean_psnr_db": 45.966
+    },
+    "avif_q70_444": {
+      "sample_bytes": 2783085,
+      "change_pct": -45.15,
+      "pixels_equal_all": false,
+      "median_encode_seconds": 0.7661,
+      "mean_psnr_db": 43.823
+    }
+  },
+  "samples": [
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\contenido\\cita-medica-angel\\clases\\CLASE_01_consulta-general-essalud\\img\\cap_001793396608_p1.jpg",
+      "source_bytes": 155079,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "source_sha256": "74514429667b3d53c1371f3f44615a4c60886a8ee54c3db4951a5fc9c979d828",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 151745,
+          "seconds": 0.1995,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 539456,
+          "seconds": 2.0835,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 141632,
+          "seconds": 0.974,
+          "pixels_equal": false,
+          "psnr_db": 46.154
+        },
+        "webp_q85": {
+          "bytes": 77104,
+          "seconds": 1.1312,
+          "pixels_equal": false,
+          "psnr_db": 43.029
+        },
+        "avif_q90_444": {
+          "bytes": 136945,
+          "seconds": 0.5628,
+          "pixels_equal": false,
+          "psnr_db": 47.446
+        },
+        "avif_lossless": {
+          "bytes": 855769,
+          "seconds": 3.7017,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 121456,
+          "seconds": 1.8267,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 121554,
+          "seconds": 1.986,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 96482,
+          "seconds": 1.0612,
+          "pixels_equal": false,
+          "psnr_db": 45.76
+        },
+        "avif_q70_444": {
+          "bytes": 75223,
+          "seconds": 0.7787,
+          "pixels_equal": false,
+          "psnr_db": 44.33
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\contenido\\cita-medica-angel\\clases\\CLASE_01_consulta-general-essalud\\img\\cap_001793396982_p1.jpg",
+      "source_bytes": 158728,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "source_sha256": "b51cfec146029edba5bcc42b0ce4eb13249d2ed8613a5a3e458b8b10b4a97460",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 155439,
+          "seconds": 0.1843,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 568358,
+          "seconds": 1.6504,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 145856,
+          "seconds": 1.134,
+          "pixels_equal": false,
+          "psnr_db": 45.977
+        },
+        "webp_q85": {
+          "bytes": 78880,
+          "seconds": 0.8382,
+          "pixels_equal": false,
+          "psnr_db": 42.983
+        },
+        "avif_q90_444": {
+          "bytes": 139047,
+          "seconds": 0.6277,
+          "pixels_equal": false,
+          "psnr_db": 47.439
+        },
+        "avif_lossless": {
+          "bytes": 904689,
+          "seconds": 3.9822,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 124567,
+          "seconds": 1.8806,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 124720,
+          "seconds": 1.9841,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 97395,
+          "seconds": 1.0902,
+          "pixels_equal": false,
+          "psnr_db": 45.773
+        },
+        "avif_q70_444": {
+          "bytes": 75919,
+          "seconds": 0.822,
+          "pixels_equal": false,
+          "psnr_db": 44.322
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\contenido\\cita-medica-angel\\clases\\CLASE_01_consulta-general-essalud\\img\\cap_001793396990_p1.jpg",
+      "source_bytes": 157618,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "source_sha256": "cb8c8334802e880efa7436d7e60e6fd344e866957f20716d6d7087e49b55e1bb",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 154319,
+          "seconds": 0.2045,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 556864,
+          "seconds": 1.9706,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 144096,
+          "seconds": 0.8116,
+          "pixels_equal": false,
+          "psnr_db": 46.026
+        },
+        "webp_q85": {
+          "bytes": 78036,
+          "seconds": 0.6992,
+          "pixels_equal": false,
+          "psnr_db": 41.711
+        },
+        "avif_q90_444": {
+          "bytes": 138709,
+          "seconds": 0.5645,
+          "pixels_equal": false,
+          "psnr_db": 47.408
+        },
+        "avif_lossless": {
+          "bytes": 895569,
+          "seconds": 4.0548,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 124072,
+          "seconds": 1.9853,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 124162,
+          "seconds": 2.0693,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 97499,
+          "seconds": 1.0382,
+          "pixels_equal": false,
+          "psnr_db": 45.74
+        },
+        "avif_q70_444": {
+          "bytes": 75735,
+          "seconds": 0.7831,
+          "pixels_equal": false,
+          "psnr_db": 44.316
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\contenido\\maestria-inteligencia-artificial\\clases\\CLASE_01_clase-1\\img\\cap_001784126475_p1.jpg",
+      "source_bytes": 192825,
+      "dimensions": [
+        1916,
+        854
+      ],
+      "source_sha256": "7d186250f517df501803a1fab9debd4faf22d28ea8bdc1b311a24ed9698a3491",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 190491,
+          "seconds": 0.1697,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 610136,
+          "seconds": 1.4266,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 215222,
+          "seconds": 0.9922,
+          "pixels_equal": false,
+          "psnr_db": 48.008
+        },
+        "webp_q85": {
+          "bytes": 120896,
+          "seconds": 0.9062,
+          "pixels_equal": false,
+          "psnr_db": 42.822
+        },
+        "avif_q90_444": {
+          "bytes": 188664,
+          "seconds": 0.8379,
+          "pixels_equal": false,
+          "psnr_db": 48.2
+        },
+        "avif_lossless": {
+          "bytes": 943187,
+          "seconds": 3.7192,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 163973,
+          "seconds": 1.4007,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 164041,
+          "seconds": 1.5374,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 140435,
+          "seconds": 0.8885,
+          "pixels_equal": false,
+          "psnr_db": 45.34
+        },
+        "avif_q70_444": {
+          "bytes": 111943,
+          "seconds": 0.8103,
+          "pixels_equal": false,
+          "psnr_db": 43.193
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\contenido\\maestria-inteligencia-artificial\\clases\\CLASE_01_clase-1\\img\\cap_001784131089_p1.jpg",
+      "source_bytes": 124636,
+      "dimensions": [
+        1916,
+        854
+      ],
+      "source_sha256": "020d4cb1cdd4934a22ffd4dfdbc75668764c66c34010089377737008b876c556",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 121749,
+          "seconds": 0.1646,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 358246,
+          "seconds": 1.5733,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 123238,
+          "seconds": 0.9448,
+          "pixels_equal": false,
+          "psnr_db": 49.504
+        },
+        "webp_q85": {
+          "bytes": 68232,
+          "seconds": 0.7767,
+          "pixels_equal": false,
+          "psnr_db": 44.918
+        },
+        "avif_q90_444": {
+          "bytes": 110631,
+          "seconds": 0.717,
+          "pixels_equal": false,
+          "psnr_db": 50.536
+        },
+        "avif_lossless": {
+          "bytes": 576767,
+          "seconds": 2.8763,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 102787,
+          "seconds": 1.1731,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 102829,
+          "seconds": 1.2562,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 83410,
+          "seconds": 0.8042,
+          "pixels_equal": false,
+          "psnr_db": 48.188
+        },
+        "avif_q70_444": {
+          "bytes": 66563,
+          "seconds": 0.755,
+          "pixels_equal": false,
+          "psnr_db": 46.078
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\contenido\\maestria-inteligencia-artificial\\clases\\CLASE_01_clase-1\\img\\cap_001784131359_p1.jpg",
+      "source_bytes": 90700,
+      "dimensions": [
+        1916,
+        854
+      ],
+      "source_sha256": "f70e0758593786cba4952d616a9f7a5f86bc2825ac4e219158b909a5afcee376",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 89148,
+          "seconds": 0.1482,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 275570,
+          "seconds": 1.351,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 88540,
+          "seconds": 0.7036,
+          "pixels_equal": false,
+          "psnr_db": 50.346
+        },
+        "webp_q85": {
+          "bytes": 48900,
+          "seconds": 0.4374,
+          "pixels_equal": false,
+          "psnr_db": 45.523
+        },
+        "avif_q90_444": {
+          "bytes": 83802,
+          "seconds": 0.4307,
+          "pixels_equal": false,
+          "psnr_db": 52.562
+        },
+        "avif_lossless": {
+          "bytes": 401438,
+          "seconds": 2.3975,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 72582,
+          "seconds": 0.8534,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 72646,
+          "seconds": 0.9152,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 62637,
+          "seconds": 0.7988,
+          "pixels_equal": false,
+          "psnr_db": 49.847
+        },
+        "avif_q70_444": {
+          "bytes": 50670,
+          "seconds": 0.5806,
+          "pixels_equal": false,
+          "psnr_db": 47.545
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\contenido\\maestria-inteligencia-artificial\\clases\\CLASE_02_clase2\\img\\cap_001784820858_p1.jpg",
+      "source_bytes": 99255,
+      "dimensions": [
+        1678,
+        1079
+      ],
+      "source_sha256": "066e8807fa8e2025704b913dc3a606b868e6853f7a170be689cbee8c3c03d916",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 97117,
+          "seconds": 0.1452,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 303968,
+          "seconds": 1.2495,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 92432,
+          "seconds": 0.5404,
+          "pixels_equal": false,
+          "psnr_db": 49.358
+        },
+        "webp_q85": {
+          "bytes": 52170,
+          "seconds": 0.6025,
+          "pixels_equal": false,
+          "psnr_db": 45.746
+        },
+        "avif_q90_444": {
+          "bytes": 89520,
+          "seconds": 0.4944,
+          "pixels_equal": false,
+          "psnr_db": 51.636
+        },
+        "avif_lossless": {
+          "bytes": 455915,
+          "seconds": 2.2074,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 79696,
+          "seconds": 1.0357,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 79739,
+          "seconds": 1.0611,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 64920,
+          "seconds": 0.6251,
+          "pixels_equal": false,
+          "psnr_db": 49.248
+        },
+        "avif_q70_444": {
+          "bytes": 51434,
+          "seconds": 0.5029,
+          "pixels_equal": false,
+          "psnr_db": 47.203
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\contenido\\maestria-inteligencia-artificial\\clases\\CLASE_02_clase2\\img\\cap_001784822787_p1.jpg",
+      "source_bytes": 118788,
+      "dimensions": [
+        1678,
+        1079
+      ],
+      "source_sha256": "588bbbca877431cad4d33e59dc5ef3b6e0bfeb954e43be8b45494aad49b06342",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 117198,
+          "seconds": 0.1519,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 552876,
+          "seconds": 1.6703,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 124800,
+          "seconds": 0.8458,
+          "pixels_equal": false,
+          "psnr_db": 46.828
+        },
+        "webp_q85": {
+          "bytes": 64798,
+          "seconds": 0.7835,
+          "pixels_equal": false,
+          "psnr_db": 43.171
+        },
+        "avif_q90_444": {
+          "bytes": 119350,
+          "seconds": 0.5238,
+          "pixels_equal": false,
+          "psnr_db": 49.611
+        },
+        "avif_lossless": {
+          "bytes": 737153,
+          "seconds": 3.0613,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 97716,
+          "seconds": 1.4756,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 97779,
+          "seconds": 1.5029,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 85282,
+          "seconds": 0.6998,
+          "pixels_equal": false,
+          "psnr_db": 47.726
+        },
+        "avif_q70_444": {
+          "bytes": 67880,
+          "seconds": 0.4885,
+          "pixels_equal": false,
+          "psnr_db": 46.144
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\contenido\\maestria-inteligencia-artificial\\clases\\CLASE_02_clase2\\img\\cap_001784825891_p1.jpg",
+      "source_bytes": 150834,
+      "dimensions": [
+        1678,
+        1079
+      ],
+      "source_sha256": "2562e258e395160b57c8b2015bee4e0a863061cdd2d0205915ab16e9f2388aaf",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 148295,
+          "seconds": 0.1873,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 423332,
+          "seconds": 1.6848,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 153008,
+          "seconds": 0.9844,
+          "pixels_equal": false,
+          "psnr_db": 49.588
+        },
+        "webp_q85": {
+          "bytes": 89990,
+          "seconds": 0.6711,
+          "pixels_equal": false,
+          "psnr_db": 44.599
+        },
+        "avif_q90_444": {
+          "bytes": 145070,
+          "seconds": 0.5934,
+          "pixels_equal": false,
+          "psnr_db": 50.629
+        },
+        "avif_lossless": {
+          "bytes": 676647,
+          "seconds": 2.772,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 125211,
+          "seconds": 1.1909,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 125298,
+          "seconds": 1.3385,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 107834,
+          "seconds": 0.7896,
+          "pixels_equal": false,
+          "psnr_db": 47.628
+        },
+        "avif_q70_444": {
+          "bytes": 86998,
+          "seconds": 0.7661,
+          "pixels_equal": false,
+          "psnr_db": 45.349
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\contenido\\maestria-inteligencia-artificial\\clases\\CLASE_03_clase-2\\img\\cap_001784861788_p1.jpg",
+      "source_bytes": 120262,
+      "dimensions": [
+        1692,
+        1140
+      ],
+      "source_sha256": "b8a2060b5bcce25df09bfeb468b8efc0188da274dac91bf06beb990315658182",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 118408,
+          "seconds": 0.1588,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 345280,
+          "seconds": 1.0921,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 117140,
+          "seconds": 0.6515,
+          "pixels_equal": false,
+          "psnr_db": 49.039
+        },
+        "webp_q85": {
+          "bytes": 67376,
+          "seconds": 0.641,
+          "pixels_equal": false,
+          "psnr_db": 44.955
+        },
+        "avif_q90_444": {
+          "bytes": 112153,
+          "seconds": 0.4095,
+          "pixels_equal": false,
+          "psnr_db": 51.136
+        },
+        "avif_lossless": {
+          "bytes": 592904,
+          "seconds": 2.1168,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 97787,
+          "seconds": 1.3409,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 97837,
+          "seconds": 1.1748,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 83443,
+          "seconds": 0.5111,
+          "pixels_equal": false,
+          "psnr_db": 48.343
+        },
+        "avif_q70_444": {
+          "bytes": 67059,
+          "seconds": 0.458,
+          "pixels_equal": false,
+          "psnr_db": 46.131
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\contenido\\maestria-inteligencia-artificial\\clases\\CLASE_03_clase-2\\img\\cap_001784862461_p1.jpg",
+      "source_bytes": 153835,
+      "dimensions": [
+        1692,
+        1140
+      ],
+      "source_sha256": "5adf137e6043a9b7ba2628f34b505d6d08cc98fae0ae33a21630a39dc41f40cb",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 151300,
+          "seconds": 0.2115,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 426848,
+          "seconds": 1.6344,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 141250,
+          "seconds": 1.0504,
+          "pixels_equal": false,
+          "psnr_db": 46.252
+        },
+        "webp_q85": {
+          "bytes": 79410,
+          "seconds": 0.8119,
+          "pixels_equal": false,
+          "psnr_db": 43.262
+        },
+        "avif_q90_444": {
+          "bytes": 133445,
+          "seconds": 0.4316,
+          "pixels_equal": false,
+          "psnr_db": 50.025
+        },
+        "avif_lossless": {
+          "bytes": 728611,
+          "seconds": 2.4316,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 122940,
+          "seconds": 1.3296,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 122960,
+          "seconds": 1.4736,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 98237,
+          "seconds": 0.4221,
+          "pixels_equal": false,
+          "psnr_db": 46.952
+        },
+        "avif_q70_444": {
+          "bytes": 78604,
+          "seconds": 0.4966,
+          "pixels_equal": false,
+          "psnr_db": 44.754
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\contenido\\maestria-inteligencia-artificial\\clases\\CLASE_03_clase-2\\img\\cap_001784863031_p1.jpg",
+      "source_bytes": 131952,
+      "dimensions": [
+        1692,
+        1140
+      ],
+      "source_sha256": "0cdf70fadcc666922715f5e709c168941caf5da09e365d06270fc501926d1131",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 129684,
+          "seconds": 0.1953,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 425568,
+          "seconds": 1.6379,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 118788,
+          "seconds": 0.676,
+          "pixels_equal": false,
+          "psnr_db": 46.294
+        },
+        "webp_q85": {
+          "bytes": 68386,
+          "seconds": 0.7684,
+          "pixels_equal": false,
+          "psnr_db": 43.351
+        },
+        "avif_q90_444": {
+          "bytes": 113136,
+          "seconds": 0.3593,
+          "pixels_equal": false,
+          "psnr_db": 49.797
+        },
+        "avif_lossless": {
+          "bytes": 614157,
+          "seconds": 2.2077,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 102814,
+          "seconds": 1.292,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 102856,
+          "seconds": 1.3596,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 83584,
+          "seconds": 0.6105,
+          "pixels_equal": false,
+          "psnr_db": 47.12
+        },
+        "avif_q70_444": {
+          "bytes": 67397,
+          "seconds": 0.4422,
+          "pixels_equal": false,
+          "psnr_db": 45.032
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\contenido\\maestria-inteligencia-artificial\\clases\\CLASE_04_clase-3\\img\\cap_001785594685_p1.jpg",
+      "source_bytes": 105227,
+      "dimensions": [
+        929,
+        823
+      ],
+      "source_sha256": "c3711a806350bc79f18c1b265bf7b324cfa51ded065ff2446acae929ba764a98",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 103745,
+          "seconds": 0.1056,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 279156,
+          "seconds": 0.8226,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 108740,
+          "seconds": 0.437,
+          "pixels_equal": false,
+          "psnr_db": 46.81
+        },
+        "webp_q85": {
+          "bytes": 65712,
+          "seconds": 0.4461,
+          "pixels_equal": false,
+          "psnr_db": 41.985
+        },
+        "avif_q90_444": {
+          "bytes": 93823,
+          "seconds": 1.479,
+          "pixels_equal": false,
+          "psnr_db": 48.091
+        },
+        "avif_lossless": {
+          "bytes": 409875,
+          "seconds": 2.1068,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 88523,
+          "seconds": 0.7916,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 88553,
+          "seconds": 0.8776,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 69775,
+          "seconds": 1.4927,
+          "pixels_equal": false,
+          "psnr_db": 44.726
+        },
+        "avif_q70_444": {
+          "bytes": 56049,
+          "seconds": 1.3694,
+          "pixels_equal": false,
+          "psnr_db": 42.303
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\contenido\\maestria-inteligencia-artificial\\clases\\CLASE_04_clase-3\\img\\cap_001785594921_p1.jpg",
+      "source_bytes": 111693,
+      "dimensions": [
+        929,
+        823
+      ],
+      "source_sha256": "1d6793f1ddde042e553aa6c17c1bc71e20ef67e383dca10be5c52bbac625fcb3",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 109892,
+          "seconds": 0.2206,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 272990,
+          "seconds": 0.632,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 112558,
+          "seconds": 0.3454,
+          "pixels_equal": false,
+          "psnr_db": 45.509
+        },
+        "webp_q85": {
+          "bytes": 67988,
+          "seconds": 0.3132,
+          "pixels_equal": false,
+          "psnr_db": 41.517
+        },
+        "avif_q90_444": {
+          "bytes": 97599,
+          "seconds": 1.4417,
+          "pixels_equal": false,
+          "psnr_db": 48.065
+        },
+        "avif_lossless": {
+          "bytes": 426443,
+          "seconds": 2.2065,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 92386,
+          "seconds": 0.7713,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 92456,
+          "seconds": 0.938,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 73082,
+          "seconds": 1.5384,
+          "pixels_equal": false,
+          "psnr_db": 44.665
+        },
+        "avif_q70_444": {
+          "bytes": 58717,
+          "seconds": 1.3266,
+          "pixels_equal": false,
+          "psnr_db": 42.241
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\contenido\\maestria-inteligencia-artificial\\clases\\CLASE_04_clase-3\\img\\cap_001785595792_p1.jpg",
+      "source_bytes": 127267,
+      "dimensions": [
+        929,
+        823
+      ],
+      "source_sha256": "1013f0148e25d8e24c811ff013a9d03d0ac526a0959e3854b9945644c57eb107",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 125672,
+          "seconds": 0.1235,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 370902,
+          "seconds": 0.7587,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 129010,
+          "seconds": 0.5506,
+          "pixels_equal": false,
+          "psnr_db": 40.73
+        },
+        "webp_q85": {
+          "bytes": 76772,
+          "seconds": 0.4426,
+          "pixels_equal": false,
+          "psnr_db": 38.621
+        },
+        "avif_q90_444": {
+          "bytes": 115364,
+          "seconds": 1.6079,
+          "pixels_equal": false,
+          "psnr_db": 45.997
+        },
+        "avif_lossless": {
+          "bytes": 505303,
+          "seconds": 2.3047,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 107396,
+          "seconds": 0.9394,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 107442,
+          "seconds": 0.9703,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 84285,
+          "seconds": 1.6741,
+          "pixels_equal": false,
+          "psnr_db": 42.706
+        },
+        "avif_q70_444": {
+          "bytes": 66219,
+          "seconds": 1.4874,
+          "pixels_equal": false,
+          "psnr_db": 40.424
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\contenido\\maestria-inteligencia-artificial\\clases\\CLASE_05_clase-semana-4\\img\\cap_001786200734_p1.jpg",
+      "source_bytes": 114836,
+      "dimensions": [
+        934,
+        936
+      ],
+      "source_sha256": "e42423a819631f6966c80280fcd18ed800f647dd0c4bcb4e15a00f16d2c6de15",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 112942,
+          "seconds": 0.1219,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 308874,
+          "seconds": 0.9458,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 110896,
+          "seconds": 0.437,
+          "pixels_equal": false,
+          "psnr_db": 44.866
+        },
+        "webp_q85": {
+          "bytes": 65254,
+          "seconds": 0.4256,
+          "pixels_equal": false,
+          "psnr_db": 41.285
+        },
+        "avif_q90_444": {
+          "bytes": 95972,
+          "seconds": 1.2006,
+          "pixels_equal": false,
+          "psnr_db": 47.971
+        },
+        "avif_lossless": {
+          "bytes": 460077,
+          "seconds": 2.0584,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 90974,
+          "seconds": 0.879,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 91030,
+          "seconds": 0.9619,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 70835,
+          "seconds": 1.126,
+          "pixels_equal": false,
+          "psnr_db": 44.84
+        },
+        "avif_q70_444": {
+          "bytes": 56602,
+          "seconds": 1.1105,
+          "pixels_equal": false,
+          "psnr_db": 42.509
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\contenido\\maestria-inteligencia-artificial\\clases\\CLASE_05_clase-semana-4\\img\\cap_001786201520_p1.jpg",
+      "source_bytes": 128164,
+      "dimensions": [
+        1039,
+        920
+      ],
+      "source_sha256": "764ef2835c8a0523e22b21b6b923da4830d0c8e02fcf1f1a3727e7aeff9e785d",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 126293,
+          "seconds": 0.1277,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 325762,
+          "seconds": 0.7589,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 130312,
+          "seconds": 0.4011,
+          "pixels_equal": false,
+          "psnr_db": 46.803
+        },
+        "webp_q85": {
+          "bytes": 77366,
+          "seconds": 0.3451,
+          "pixels_equal": false,
+          "psnr_db": 42.093
+        },
+        "avif_q90_444": {
+          "bytes": 116844,
+          "seconds": 1.1035,
+          "pixels_equal": false,
+          "psnr_db": 48.704
+        },
+        "avif_lossless": {
+          "bytes": 502012,
+          "seconds": 2.2086,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 106057,
+          "seconds": 1.0409,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 106085,
+          "seconds": 0.9547,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 86504,
+          "seconds": 1.0982,
+          "pixels_equal": false,
+          "psnr_db": 45.225
+        },
+        "avif_q70_444": {
+          "bytes": 70385,
+          "seconds": 1.042,
+          "pixels_equal": false,
+          "psnr_db": 42.842
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\contenido\\maestria-inteligencia-artificial\\clases\\CLASE_05_clase-semana-4\\img\\cap_001786201674_p1.jpg",
+      "source_bytes": 160577,
+      "dimensions": [
+        1039,
+        920
+      ],
+      "source_sha256": "b009ea8b1a72418a731644a691f7568797b6c0a7bf7610abd03d249a40e21b61",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 158621,
+          "seconds": 0.1483,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 375248,
+          "seconds": 1.1694,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 170212,
+          "seconds": 0.5678,
+          "pixels_equal": false,
+          "psnr_db": 45.611
+        },
+        "webp_q85": {
+          "bytes": 105268,
+          "seconds": 0.4022,
+          "pixels_equal": false,
+          "psnr_db": 41.152
+        },
+        "avif_q90_444": {
+          "bytes": 147207,
+          "seconds": 1.2179,
+          "pixels_equal": false,
+          "psnr_db": 47.788
+        },
+        "avif_lossless": {
+          "bytes": 639120,
+          "seconds": 2.6342,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 137762,
+          "seconds": 1.0246,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 137779,
+          "seconds": 1.0817,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 108482,
+          "seconds": 1.1994,
+          "pixels_equal": false,
+          "psnr_db": 43.975
+        },
+        "avif_q70_444": {
+          "bytes": 88166,
+          "seconds": 1.1747,
+          "pixels_equal": false,
+          "psnr_db": 41.57
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\contenido\\maestria-inteligencia-artificial\\clases\\CLASE_06_ultima-clase\\img\\cap_001788383293_p1.jpg",
+      "source_bytes": 60782,
+      "dimensions": [
+        936,
+        633
+      ],
+      "source_sha256": "f19bd64551ab0e7a487339da5fd6343705091e74e909fe1b25508df4922645c9",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 60036,
+          "seconds": 0.0851,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 248662,
+          "seconds": 0.8541,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 64610,
+          "seconds": 0.258,
+          "pixels_equal": false,
+          "psnr_db": 45.743
+        },
+        "webp_q85": {
+          "bytes": 35398,
+          "seconds": 0.2396,
+          "pixels_equal": false,
+          "psnr_db": 41.926
+        },
+        "avif_q90_444": {
+          "bytes": 63325,
+          "seconds": 0.2183,
+          "pixels_equal": false,
+          "psnr_db": 47.146
+        },
+        "avif_lossless": {
+          "bytes": 350972,
+          "seconds": 0.689,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 52080,
+          "seconds": 0.6243,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 52124,
+          "seconds": 0.6805,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 47604,
+          "seconds": 0.2162,
+          "pixels_equal": false,
+          "psnr_db": 45.246
+        },
+        "avif_q70_444": {
+          "bytes": 38441,
+          "seconds": 0.2198,
+          "pixels_equal": false,
+          "psnr_db": 43.58
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\contenido\\maestria-inteligencia-artificial\\clases\\CLASE_06_ultima-clase\\img\\cap_001788384929_p1.jpg",
+      "source_bytes": 39450,
+      "dimensions": [
+        936,
+        633
+      ],
+      "source_sha256": "4a3e7571aba637644e7e9adc66c6ee9715649d4eda5a05ab6833bfaf6eb82a51",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 38481,
+          "seconds": 0.0848,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 74262,
+          "seconds": 0.6875,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 34434,
+          "seconds": 0.2754,
+          "pixels_equal": false,
+          "psnr_db": 51.222
+        },
+        "webp_q85": {
+          "bytes": 20892,
+          "seconds": 0.1571,
+          "pixels_equal": false,
+          "psnr_db": 46.216
+        },
+        "avif_q90_444": {
+          "bytes": 32050,
+          "seconds": 0.6975,
+          "pixels_equal": false,
+          "psnr_db": 52.149
+        },
+        "avif_lossless": {
+          "bytes": 134061,
+          "seconds": 1.0013,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 30483,
+          "seconds": 0.3425,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 30496,
+          "seconds": 0.3451,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 24700,
+          "seconds": 0.7676,
+          "pixels_equal": false,
+          "psnr_db": 48.953
+        },
+        "avif_q70_444": {
+          "bytes": 20212,
+          "seconds": 0.7405,
+          "pixels_equal": false,
+          "psnr_db": 46.554
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\contenido\\maestria-inteligencia-artificial\\clases\\CLASE_06_ultima-clase\\img\\cap_001788385239_p1.jpg",
+      "source_bytes": 100953,
+      "dimensions": [
+        936,
+        633
+      ],
+      "source_sha256": "7d7fadc0fa83aa48ab272267bf93a86989ec7d229ef7e0b9c2809567696e660b",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 99717,
+          "seconds": 0.1113,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 215722,
+          "seconds": 0.7933,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 106084,
+          "seconds": 0.324,
+          "pixels_equal": false,
+          "psnr_db": 47.305
+        },
+        "webp_q85": {
+          "bytes": 65468,
+          "seconds": 0.2538,
+          "pixels_equal": false,
+          "psnr_db": 41.723
+        },
+        "avif_q90_444": {
+          "bytes": 98648,
+          "seconds": 0.283,
+          "pixels_equal": false,
+          "psnr_db": 47.7
+        },
+        "avif_lossless": {
+          "bytes": 412331,
+          "seconds": 1.1573,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 85102,
+          "seconds": 0.5454,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 85113,
+          "seconds": 0.5804,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 75000,
+          "seconds": 0.2705,
+          "pixels_equal": false,
+          "psnr_db": 44.091
+        },
+        "avif_q70_444": {
+          "bytes": 61199,
+          "seconds": 0.2953,
+          "pixels_equal": false,
+          "psnr_db": 41.678
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\contenido\\visualizacion-de-datos\\clases\\CLASE_01_semana-2\\img\\cap_001794062090_p1.jpg",
+      "source_bytes": 226979,
+      "dimensions": [
+        1572,
+        1155
+      ],
+      "source_sha256": "beb2c1fb143f131fb168b0437ce51f7f112db6698692799bbb3a2b402972381e",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 223129,
+          "seconds": 0.2051,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 631624,
+          "seconds": 1.6376,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 223130,
+          "seconds": 1.0506,
+          "pixels_equal": false,
+          "psnr_db": 46.016
+        },
+        "webp_q85": {
+          "bytes": 128392,
+          "seconds": 1.0111,
+          "pixels_equal": false,
+          "psnr_db": 42.02
+        },
+        "avif_q90_444": {
+          "bytes": 203542,
+          "seconds": 1.7112,
+          "pixels_equal": false,
+          "psnr_db": 47.844
+        },
+        "avif_lossless": {
+          "bytes": 1003509,
+          "seconds": 3.9954,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 178972,
+          "seconds": 1.5951,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 179040,
+          "seconds": 1.6618,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 148065,
+          "seconds": 1.7143,
+          "pixels_equal": false,
+          "psnr_db": 44.823
+        },
+        "avif_q70_444": {
+          "bytes": 117815,
+          "seconds": 1.6603,
+          "pixels_equal": false,
+          "psnr_db": 42.742
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\contenido\\visualizacion-de-datos\\clases\\CLASE_01_semana-2\\img\\cap_001794088564_p3.jpg",
+      "source_bytes": 54619,
+      "dimensions": [
+        893,
+        434
+      ],
+      "source_sha256": "04f40a9cec3b37ea10745909f88841048d63368ce954de624f9ac34f2992ab83",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 54041,
+          "seconds": 0.0752,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 154400,
+          "seconds": 0.4176,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 57094,
+          "seconds": 0.2007,
+          "pixels_equal": false,
+          "psnr_db": 46.306
+        },
+        "webp_q85": {
+          "bytes": 34856,
+          "seconds": 0.1738,
+          "pixels_equal": false,
+          "psnr_db": 41.977
+        },
+        "avif_q90_444": {
+          "bytes": 51008,
+          "seconds": 0.3583,
+          "pixels_equal": false,
+          "psnr_db": 47.461
+        },
+        "avif_lossless": {
+          "bytes": 225667,
+          "seconds": 0.7928,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 47962,
+          "seconds": 0.3543,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 48009,
+          "seconds": 0.3788,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 37441,
+          "seconds": 0.3534,
+          "pixels_equal": false,
+          "psnr_db": 44.048
+        },
+        "avif_q70_444": {
+          "bytes": 29755,
+          "seconds": 0.3559,
+          "pixels_equal": false,
+          "psnr_db": 41.827
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\contenido\\visualizacion-de-datos\\clases\\CLASE_01_semana-2\\img\\cap_001794089088_p3.jpg",
+      "source_bytes": 70713,
+      "dimensions": [
+        893,
+        434
+      ],
+      "source_sha256": "4551ddc29fc5d39abd4a9181786af4987ef8800e8308321a58891f745ada4a0a",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 69921,
+          "seconds": 0.0961,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 176884,
+          "seconds": 0.5799,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 72566,
+          "seconds": 0.2039,
+          "pixels_equal": false,
+          "psnr_db": 44.32
+        },
+        "webp_q85": {
+          "bytes": 45258,
+          "seconds": 0.1817,
+          "pixels_equal": false,
+          "psnr_db": 40.713
+        },
+        "avif_q90_444": {
+          "bytes": 63671,
+          "seconds": 0.3984,
+          "pixels_equal": false,
+          "psnr_db": 46.369
+        },
+        "avif_lossless": {
+          "bytes": 275044,
+          "seconds": 0.8303,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 61206,
+          "seconds": 0.396,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 61245,
+          "seconds": 0.4227,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 46384,
+          "seconds": 0.4786,
+          "pixels_equal": false,
+          "psnr_db": 42.761
+        },
+        "avif_q70_444": {
+          "bytes": 36872,
+          "seconds": 0.3998,
+          "pixels_equal": false,
+          "psnr_db": 40.509
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\3.SEMESTRE_III\\7.INFRAESTRUCTURA\\SEMANA_1\\CLASE_APUNTE\\img\\cap_001789353890_p1.jpg",
+      "source_bytes": 72374,
+      "dimensions": [
+        1638,
+        914
+      ],
+      "source_sha256": "860bfd1e742d4637be995868bdb97bef4b94150c9be3f1c7f634f5158296af37",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 70762,
+          "seconds": 0.1121,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 203474,
+          "seconds": 1.002,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 54000,
+          "seconds": 0.6508,
+          "pixels_equal": false,
+          "psnr_db": 51.086
+        },
+        "webp_q85": {
+          "bytes": 28542,
+          "seconds": 0.5159,
+          "pixels_equal": false,
+          "psnr_db": 46.545
+        },
+        "avif_q90_444": {
+          "bytes": 50991,
+          "seconds": 0.1984,
+          "pixels_equal": false,
+          "psnr_db": 52.25
+        },
+        "avif_lossless": {
+          "bytes": 292810,
+          "seconds": 1.1225,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 52765,
+          "seconds": 0.7976,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 52815,
+          "seconds": 0.8505,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 38170,
+          "seconds": 0.2083,
+          "pixels_equal": false,
+          "psnr_db": 50.003
+        },
+        "avif_q70_444": {
+          "bytes": 30098,
+          "seconds": 0.2061,
+          "pixels_equal": false,
+          "psnr_db": 48.063
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\3.SEMESTRE_III\\7.INFRAESTRUCTURA\\SEMANA_1\\CLASE_APUNTE\\img\\cap_001789355584_p1.jpg",
+      "source_bytes": 120258,
+      "dimensions": [
+        1638,
+        914
+      ],
+      "source_sha256": "6493614d469ee08e36cb2a54c08f857d4114d70eef1bfdea853386b641595066",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 118528,
+          "seconds": 0.1447,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 403600,
+          "seconds": 1.1404,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 116438,
+          "seconds": 0.8276,
+          "pixels_equal": false,
+          "psnr_db": 49.108
+        },
+        "webp_q85": {
+          "bytes": 65550,
+          "seconds": 0.6945,
+          "pixels_equal": false,
+          "psnr_db": 44.037
+        },
+        "avif_q90_444": {
+          "bytes": 104297,
+          "seconds": 0.3031,
+          "pixels_equal": false,
+          "psnr_db": 51.021
+        },
+        "avif_lossless": {
+          "bytes": 583283,
+          "seconds": 1.1972,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 99715,
+          "seconds": 1.0581,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 99769,
+          "seconds": 1.0828,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 80371,
+          "seconds": 0.314,
+          "pixels_equal": false,
+          "psnr_db": 48.387
+        },
+        "avif_q70_444": {
+          "bytes": 65007,
+          "seconds": 0.3927,
+          "pixels_equal": false,
+          "psnr_db": 45.948
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\3.SEMESTRE_III\\7.INFRAESTRUCTURA\\SEMANA_1\\CLASE_APUNTE\\img\\cap_001789359709_p1.jpg",
+      "source_bytes": 79206,
+      "dimensions": [
+        1643,
+        879
+      ],
+      "source_sha256": "fa50630fb8175bb26e1db85185200579ae30224c5b38a800b5a400ff6432e58c",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 77268,
+          "seconds": 0.136,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 201178,
+          "seconds": 1.1304,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 70578,
+          "seconds": 0.5863,
+          "pixels_equal": false,
+          "psnr_db": 49.759
+        },
+        "webp_q85": {
+          "bytes": 41500,
+          "seconds": 0.5131,
+          "pixels_equal": false,
+          "psnr_db": 45.52
+        },
+        "avif_q90_444": {
+          "bytes": 67218,
+          "seconds": 0.2834,
+          "pixels_equal": false,
+          "psnr_db": 51.05
+        },
+        "avif_lossless": {
+          "bytes": 335465,
+          "seconds": 0.8238,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 61732,
+          "seconds": 0.8025,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 61784,
+          "seconds": 0.8629,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 51605,
+          "seconds": 0.2397,
+          "pixels_equal": false,
+          "psnr_db": 48.911
+        },
+        "avif_q70_444": {
+          "bytes": 42113,
+          "seconds": 0.2796,
+          "pixels_equal": false,
+          "psnr_db": 46.922
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\3.SEMESTRE_III\\7.INFRAESTRUCTURA\\SEMANA_2_HADOOP_MAP_REDUCE\\0.APUNTES_CLASE\\img\\cap_001789827225_p1.jpg",
+      "source_bytes": 150678,
+      "dimensions": [
+        960,
+        922
+      ],
+      "source_sha256": "3de73d0620ff7cde44dd7ea772bcdecdff9c593a5433e4aab82fed563b6d9196",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 149175,
+          "seconds": 0.1448,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 519888,
+          "seconds": 0.7795,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 163038,
+          "seconds": 0.648,
+          "pixels_equal": false,
+          "psnr_db": 44.424
+        },
+        "webp_q85": {
+          "bytes": 96372,
+          "seconds": 0.4793,
+          "pixels_equal": false,
+          "psnr_db": 39.964
+        },
+        "avif_q90_444": {
+          "bytes": 149051,
+          "seconds": 0.6289,
+          "pixels_equal": false,
+          "psnr_db": 45.902
+        },
+        "avif_lossless": {
+          "bytes": 699641,
+          "seconds": 2.3663,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 126413,
+          "seconds": 1.1946,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 126473,
+          "seconds": 1.2784,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 112234,
+          "seconds": 0.5837,
+          "pixels_equal": false,
+          "psnr_db": 43.065
+        },
+        "avif_q70_444": {
+          "bytes": 90567,
+          "seconds": 0.5504,
+          "pixels_equal": false,
+          "psnr_db": 40.799
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\3.SEMESTRE_III\\7.INFRAESTRUCTURA\\SEMANA_2_HADOOP_MAP_REDUCE\\0.APUNTES_CLASE\\img\\cap_001789827621_p1.jpg",
+      "source_bytes": 126325,
+      "dimensions": [
+        960,
+        922
+      ],
+      "source_sha256": "814f4c9fa64f779ac23b22d5b82b5209541aca44992e76016ac206b0d4160cfd",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 124744,
+          "seconds": 0.1285,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 398456,
+          "seconds": 0.8328,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 128264,
+          "seconds": 0.6021,
+          "pixels_equal": false,
+          "psnr_db": 45.2
+        },
+        "webp_q85": {
+          "bytes": 75314,
+          "seconds": 0.4888,
+          "pixels_equal": false,
+          "psnr_db": 40.865
+        },
+        "avif_q90_444": {
+          "bytes": 120102,
+          "seconds": 1.3604,
+          "pixels_equal": false,
+          "psnr_db": 46.863
+        },
+        "avif_lossless": {
+          "bytes": 562580,
+          "seconds": 2.1407,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 102765,
+          "seconds": 1.1099,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 102831,
+          "seconds": 1.1381,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 90232,
+          "seconds": 1.3614,
+          "pixels_equal": false,
+          "psnr_db": 44.102
+        },
+        "avif_q70_444": {
+          "bytes": 72428,
+          "seconds": 1.4337,
+          "pixels_equal": false,
+          "psnr_db": 41.846
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\3.SEMESTRE_III\\7.INFRAESTRUCTURA\\SEMANA_2_HADOOP_MAP_REDUCE\\0.APUNTES_CLASE\\img\\cap_001789827898_p1.jpg",
+      "source_bytes": 103211,
+      "dimensions": [
+        960,
+        922
+      ],
+      "source_sha256": "6d812977c3f7ab93682dd9864eafe0b979526287df26dfd584ee92ee0d5b973b",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 100662,
+          "seconds": 0.1122,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 305418,
+          "seconds": 0.7138,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 97964,
+          "seconds": 0.5085,
+          "pixels_equal": false,
+          "psnr_db": 45.171
+        },
+        "webp_q85": {
+          "bytes": 56024,
+          "seconds": 0.472,
+          "pixels_equal": false,
+          "psnr_db": 41.258
+        },
+        "avif_q90_444": {
+          "bytes": 91799,
+          "seconds": 1.3454,
+          "pixels_equal": false,
+          "psnr_db": 46.476
+        },
+        "avif_lossless": {
+          "bytes": 447559,
+          "seconds": 2.0027,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 75907,
+          "seconds": 0.7698,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 75954,
+          "seconds": 0.8149,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 68207,
+          "seconds": 1.3997,
+          "pixels_equal": false,
+          "psnr_db": 44.068
+        },
+        "avif_q70_444": {
+          "bytes": 54049,
+          "seconds": 1.4102,
+          "pixels_equal": false,
+          "psnr_db": 41.928
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\3.SEMESTRE_III\\7.INFRAESTRUCTURA\\SEMANA_3_SPARK\\0.APUNTES\\img\\cap_001790433131_p1.jpg",
+      "source_bytes": 212603,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "source_sha256": "b5b689ac1719e40b6d00971e874d938710b4459618beabdc65430716bb7f8233",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 208796,
+          "seconds": 0.2047,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 648316,
+          "seconds": 1.9669,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 214548,
+          "seconds": 1.1416,
+          "pixels_equal": false,
+          "psnr_db": 47.289
+        },
+        "webp_q85": {
+          "bytes": 121240,
+          "seconds": 1.0186,
+          "pixels_equal": false,
+          "psnr_db": 42.629
+        },
+        "avif_q90_444": {
+          "bytes": 197938,
+          "seconds": 1.2622,
+          "pixels_equal": false,
+          "psnr_db": 47.876
+        },
+        "avif_lossless": {
+          "bytes": 1053263,
+          "seconds": 3.3512,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 169173,
+          "seconds": 1.6507,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 169237,
+          "seconds": 1.7342,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 150826,
+          "seconds": 1.2066,
+          "pixels_equal": false,
+          "psnr_db": 45.547
+        },
+        "avif_q70_444": {
+          "bytes": 121975,
+          "seconds": 1.2099,
+          "pixels_equal": false,
+          "psnr_db": 43.494
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\3.SEMESTRE_III\\7.INFRAESTRUCTURA\\SEMANA_3_SPARK\\0.APUNTES\\img\\cap_001790439497_p1.jpg",
+      "source_bytes": 155679,
+      "dimensions": [
+        1920,
+        1080
+      ],
+      "source_sha256": "1816bf47eccf525790f0c6d67d8433ba84c08b516972eec6745d22772b0cb4a5",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 152494,
+          "seconds": 0.1929,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 421028,
+          "seconds": 1.5799,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 137424,
+          "seconds": 1.0111,
+          "pixels_equal": false,
+          "psnr_db": 47.336
+        },
+        "webp_q85": {
+          "bytes": 81644,
+          "seconds": 0.8218,
+          "pixels_equal": false,
+          "psnr_db": 43.66
+        },
+        "avif_q90_444": {
+          "bytes": 134834,
+          "seconds": 1.0561,
+          "pixels_equal": false,
+          "psnr_db": 50.105
+        },
+        "avif_lossless": {
+          "bytes": 669218,
+          "seconds": 3.0636,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 117874,
+          "seconds": 1.3646,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 117956,
+          "seconds": 1.431,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 102651,
+          "seconds": 0.963,
+          "pixels_equal": false,
+          "psnr_db": 47.335
+        },
+        "avif_q70_444": {
+          "bytes": 83823,
+          "seconds": 1.2053,
+          "pixels_equal": false,
+          "psnr_db": 45.21
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\3.SEMESTRE_III\\7.INFRAESTRUCTURA\\SEMANA_3_SPARK\\0.APUNTES\\img\\cap_001790463740_p2.jpg",
+      "source_bytes": 99562,
+      "dimensions": [
+        933,
+        819
+      ],
+      "source_sha256": "b3f9d294c87031cb5fab89e708031bb8aa376a344df7a8efd918cc6e35fdda2a",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 98193,
+          "seconds": 0.1173,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 251272,
+          "seconds": 0.7082,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 98566,
+          "seconds": 0.4771,
+          "pixels_equal": false,
+          "psnr_db": 46.714
+        },
+        "webp_q85": {
+          "bytes": 59952,
+          "seconds": 0.3852,
+          "pixels_equal": false,
+          "psnr_db": 42.181
+        },
+        "avif_q90_444": {
+          "bytes": 89214,
+          "seconds": 1.545,
+          "pixels_equal": false,
+          "psnr_db": 48.498
+        },
+        "avif_lossless": {
+          "bytes": 393785,
+          "seconds": 2.0983,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 80270,
+          "seconds": 0.7198,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 80291,
+          "seconds": 0.7647,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 67704,
+          "seconds": 1.7551,
+          "pixels_equal": false,
+          "psnr_db": 45.356
+        },
+        "avif_q70_444": {
+          "bytes": 54933,
+          "seconds": 1.613,
+          "pixels_equal": false,
+          "psnr_db": 43.007
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\3.SEMESTRE_III\\7.INFRAESTRUCTURA\\SEMANA_4\\0_APUNTES_TEORIA\\img\\cap_001791640627_p1.jpg",
+      "source_bytes": 219738,
+      "dimensions": [
+        1908,
+        1029
+      ],
+      "source_sha256": "c0e55d17698f63104e517fac9a88b8873c8046e464a3ea9328be1b0e6a24ebc0",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 216346,
+          "seconds": 0.2187,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 568460,
+          "seconds": 1.3423,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 217030,
+          "seconds": 1.0482,
+          "pixels_equal": false,
+          "psnr_db": 47.992
+        },
+        "webp_q85": {
+          "bytes": 135456,
+          "seconds": 0.7229,
+          "pixels_equal": false,
+          "psnr_db": 43.164
+        },
+        "avif_q90_444": {
+          "bytes": 200742,
+          "seconds": 1.3364,
+          "pixels_equal": false,
+          "psnr_db": 48.691
+        },
+        "avif_lossless": {
+          "bytes": 873505,
+          "seconds": 3.1717,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 178217,
+          "seconds": 1.5431,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 178285,
+          "seconds": 1.6354,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 153306,
+          "seconds": 1.5642,
+          "pixels_equal": false,
+          "psnr_db": 45.445
+        },
+        "avif_q70_444": {
+          "bytes": 126587,
+          "seconds": 1.4136,
+          "pixels_equal": false,
+          "psnr_db": 43.323
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\3.SEMESTRE_III\\7.INFRAESTRUCTURA\\SEMANA_4\\0_APUNTES_TEORIA\\img\\cap_001791642995_p1.jpg",
+      "source_bytes": 191735,
+      "dimensions": [
+        1908,
+        1029
+      ],
+      "source_sha256": "01ca18a8f9ba6d44274d1e7aba7331b7e485e3f0295221c375c069ef82a6bbec",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 188471,
+          "seconds": 0.1964,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 515842,
+          "seconds": 1.5598,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 195764,
+          "seconds": 1.095,
+          "pixels_equal": false,
+          "psnr_db": 48.091
+        },
+        "webp_q85": {
+          "bytes": 117398,
+          "seconds": 0.9436,
+          "pixels_equal": false,
+          "psnr_db": 43.292
+        },
+        "avif_q90_444": {
+          "bytes": 178313,
+          "seconds": 1.5434,
+          "pixels_equal": false,
+          "psnr_db": 49.291
+        },
+        "avif_lossless": {
+          "bytes": 800813,
+          "seconds": 3.4031,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 153830,
+          "seconds": 1.5013,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 153866,
+          "seconds": 1.5747,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 135873,
+          "seconds": 1.453,
+          "pixels_equal": false,
+          "psnr_db": 46.168
+        },
+        "avif_q70_444": {
+          "bytes": 110226,
+          "seconds": 1.3607,
+          "pixels_equal": false,
+          "psnr_db": 43.83
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\3.SEMESTRE_III\\7.INFRAESTRUCTURA\\SEMANA_4\\0_APUNTES_TEORIA\\img\\cap_001791651896_p1.jpg",
+      "source_bytes": 286215,
+      "dimensions": [
+        1908,
+        1029
+      ],
+      "source_sha256": "dc13d3335770ba75bd1d63e296a0bbffbf922d0ee6290130bee01d652dbf724d",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 282627,
+          "seconds": 0.2501,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 782374,
+          "seconds": 2.0217,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 321526,
+          "seconds": 0.9987,
+          "pixels_equal": false,
+          "psnr_db": 46.466
+        },
+        "webp_q85": {
+          "bytes": 197208,
+          "seconds": 0.7938,
+          "pixels_equal": false,
+          "psnr_db": 41.349
+        },
+        "avif_q90_444": {
+          "bytes": 302629,
+          "seconds": 0.3768,
+          "pixels_equal": false,
+          "psnr_db": 47.561
+        },
+        "avif_lossless": {
+          "bytes": 1198282,
+          "seconds": 1.6095,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 240384,
+          "seconds": 1.7105,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 240481,
+          "seconds": 1.834,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 237961,
+          "seconds": 0.3547,
+          "pixels_equal": false,
+          "psnr_db": 44.211
+        },
+        "avif_q70_444": {
+          "bytes": 194703,
+          "seconds": 0.5599,
+          "pixels_equal": false,
+          "psnr_db": 41.613
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\3.SEMESTRE_III\\7.INFRAESTRUCTURA\\SEMANA_5_FLINK\\0_APUNTE_TEORIA\\img\\cap_001792245592_p1.jpg",
+      "source_bytes": 77833,
+      "dimensions": [
+        961,
+        939
+      ],
+      "source_sha256": "fc108a1dc1260ee20e416ed06d98bd457c23b1879fa5daf87de28f32adcc3170",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 76352,
+          "seconds": 0.1136,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 220114,
+          "seconds": 0.6123,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 70780,
+          "seconds": 0.4451,
+          "pixels_equal": false,
+          "psnr_db": 46.554
+        },
+        "webp_q85": {
+          "bytes": 42052,
+          "seconds": 0.3957,
+          "pixels_equal": false,
+          "psnr_db": 43.07
+        },
+        "avif_q90_444": {
+          "bytes": 65084,
+          "seconds": 0.8201,
+          "pixels_equal": false,
+          "psnr_db": 48.692
+        },
+        "avif_lossless": {
+          "bytes": 318535,
+          "seconds": 1.4848,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 59745,
+          "seconds": 0.7867,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 59780,
+          "seconds": 0.7451,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 48124,
+          "seconds": 1.036,
+          "pixels_equal": false,
+          "psnr_db": 45.986
+        },
+        "avif_q70_444": {
+          "bytes": 38296,
+          "seconds": 0.6786,
+          "pixels_equal": false,
+          "psnr_db": 43.941
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\3.SEMESTRE_III\\7.INFRAESTRUCTURA\\SEMANA_5_FLINK\\0_APUNTE_TEORIA\\img\\cap_001792246822_p1.jpg",
+      "source_bytes": 118680,
+      "dimensions": [
+        961,
+        939
+      ],
+      "source_sha256": "ad1158efd9147bae35474a8dae27c6ac50d9b85c5e0ec38250e729f08181a0d8",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 116770,
+          "seconds": 0.1286,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 275890,
+          "seconds": 0.6338,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 120550,
+          "seconds": 0.3846,
+          "pixels_equal": false,
+          "psnr_db": 46.752
+        },
+        "webp_q85": {
+          "bytes": 72104,
+          "seconds": 0.3545,
+          "pixels_equal": false,
+          "psnr_db": 42.389
+        },
+        "avif_q90_444": {
+          "bytes": 107269,
+          "seconds": 1.0276,
+          "pixels_equal": false,
+          "psnr_db": 48.59
+        },
+        "avif_lossless": {
+          "bytes": 477096,
+          "seconds": 2.0103,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 96588,
+          "seconds": 0.7458,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 96684,
+          "seconds": 0.8998,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 79704,
+          "seconds": 0.9703,
+          "pixels_equal": false,
+          "psnr_db": 45.063
+        },
+        "avif_q70_444": {
+          "bytes": 64620,
+          "seconds": 0.8482,
+          "pixels_equal": false,
+          "psnr_db": 42.857
+        }
+      }
+    },
+    {
+      "path": "D:\\05_Maestria_UNSA\\3.SEMESTRE_III\\7.INFRAESTRUCTURA\\SEMANA_5_FLINK\\0_APUNTE_TEORIA\\img\\cap_001792256866_p2.jpg",
+      "source_bytes": 103954,
+      "dimensions": [
+        944,
+        904
+      ],
+      "source_sha256": "832ee0d7ddadd7b38769e2b365ff5b6f0b91c67ecfd4e915b457a57ba45cac5d",
+      "variants": {
+        "jpegoptim_lossless": {
+          "bytes": 102082,
+          "seconds": 0.1274,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_lossless": {
+          "bytes": 249536,
+          "seconds": 0.6041,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "webp_q95": {
+          "bytes": 103104,
+          "seconds": 0.3326,
+          "pixels_equal": false,
+          "psnr_db": 46.825
+        },
+        "webp_q85": {
+          "bytes": 61496,
+          "seconds": 0.2816,
+          "pixels_equal": false,
+          "psnr_db": 42.514
+        },
+        "avif_q90_444": {
+          "bytes": 93847,
+          "seconds": 0.8907,
+          "pixels_equal": false,
+          "psnr_db": 48.498
+        },
+        "avif_lossless": {
+          "bytes": 402720,
+          "seconds": 1.7759,
+          "pixels_equal": true,
+          "psnr_db": null
+        },
+        "jxl_jpeg_reconstruction_e9": {
+          "bytes": 83714,
+          "seconds": 0.7606,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "jxl_jpeg_reconstruction_e10": {
+          "bytes": 83790,
+          "seconds": 0.8191,
+          "pixels_equal": true,
+          "psnr_db": null,
+          "original_jpeg_recovered_exactly": true
+        },
+        "avif_q80_444": {
+          "bytes": 70572,
+          "seconds": 0.8857,
+          "pixels_equal": false,
+          "psnr_db": 45.314
+        },
+        "avif_q70_444": {
+          "bytes": 57803,
+          "seconds": 0.7621,
+          "pixels_equal": false,
+          "psnr_db": 43.154
+        }
+      }
+    }
+  ]
+}

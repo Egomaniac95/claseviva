@@ -1,0 +1,26 @@
+{
+  "versions": {
+    "libjxl": "0.13.0",
+    "jpegoptim": "1.5.6",
+    "libavif": "1.4.2",
+    "Pillow": "12.3.0"
+  },
+  "executables": {
+    "cjxl.exe": {
+      "bytes": 231424,
+      "sha256": "71d82a273a62bb58db8c30609666eb93e578ee2524c6dec9f73dd9f9f0bbf310"
+    },
+    "djxl.exe": {
+      "bytes": 414208,
+      "sha256": "07f51a310198a5e6cf9ad8b13ffcb62fe0fb48c589f0dcfe330b4c60348492af"
+    },
+    "avifenc.exe": {
+      "bytes": 12408832,
+      "sha256": "42312321ed9f715987cb3623292eaedc778970b45efb9b1de62ce795f61991a0"
+    },
+    "jpegoptim.exe": {
+      "bytes": 955904,
+      "sha256": "0a79681b56961ec2c5f45c4f9dff01a64e7274b4f3250c22cde5f09c0bb457f3"
+    }
+  }
+}

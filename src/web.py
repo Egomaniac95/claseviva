@@ -1,13 +1,15 @@
-"""Búsqueda web gratuita (DuckDuckGo vía `ddgs`, sin API key) para enriquecer
-copiloto, apuntes y lección final. DeepSeek no navega: NOSOTROS buscamos y le
-pasamos títulos+resúmenes+URLs para que responda citando fuentes.
+"""Fuentes web para copiloto, apuntes y lección final, sin herramientas DeepSeek.
+
+El copiloto descarga un feed público por HTTP. Las funciones de enriquecimiento
+de apuntes usan `ddgs` y descargan páginas directamente, sin API key de búsqueda.
 
 Degrada con gracia: si la librería falla o no hay red, devuelve [] y todo sigue.
 """
 from . import config
 from html.parser import HTMLParser
-from urllib.parse import urlparse
+from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
+from xml.etree import ElementTree
 import re
 
 _disponible = None
@@ -132,14 +134,56 @@ def extraer_url(url: str, timeout: float = 6.0) -> dict:
 
 
 def bloque_contexto(consulta: str, n: int = 4) -> str:
-    """Texto listo para inyectar en un prompt (con URLs para citar)."""
-    rs = buscar(consulta, n)
+    """El copiloto obtiene resultados mediante HTTP, sin herramientas DeepSeek."""
+    rs = buscar_por_fetch(consulta, n)
     if not rs:
-        return ""
+        return ("=== WEB NO DISPONIBLE ===\nNo se obtuvieron fuentes web; "
+                "indícalo y no inventes enlaces ni citas.\n\n")
     lineas = [f"=== RESULTADOS WEB para «{consulta}» (cita las URLs que uses) ==="]
     for r in rs:
         lineas.append(f"- {r['titulo']} — {r['resumen']} [{r['url']}]")
     return "\n".join(lineas) + "\n\n"
+
+
+def buscar_por_fetch(consulta: str, n: int = 4) -> list[dict]:
+    """Descarga un feed público de búsqueda; no invoca API de DeepSeek."""
+    consulta = consulta.strip()
+    if not consulta or n <= 0:
+        return []
+    # Algunos proveedores devuelven resultados genéricos ante filtros o bloqueos.
+    # No los presentamos como fuentes de una consulta que no contienen.
+    terminos = {t for t in re.findall(r"[^\W_]+", consulta.casefold())
+                if len(t) >= 4 and t not in {"para", "como", "sobre", "esta", "esto"}}
+    url = "https://www.bing.com/search?" + urlencode({"q": consulta, "format": "rss"})
+    try:
+        req = Request(url, headers={"User-Agent": "Mozilla/5.0 (compatible; ClaseViva/1.0)"})
+        with urlopen(req, timeout=8.0) as respuesta:
+            contenido = respuesta.read(500_001)
+        if len(contenido) > 500_000:
+            return []
+        raiz = ElementTree.fromstring(contenido)
+        resultados = []
+        for item in raiz.findall("./channel/item"):
+            enlace = (item.findtext("link") or "").strip()
+            parsed = urlparse(enlace)
+            if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+                continue
+            texto = " ".join((item.findtext("title") or "",
+                              item.findtext("description") or "", enlace)).casefold()
+            coincidencias = sum(t in texto for t in terminos)
+            if terminos and coincidencias < min(2, len(terminos)):
+                continue
+            resultados.append({
+                "titulo": (item.findtext("title") or "")[:200],
+                "url": enlace,
+                "resumen": (item.findtext("description") or "")[:300],
+            })
+            if len(resultados) >= min(n, 10):
+                break
+        return resultados
+    except (OSError, ValueError, ElementTree.ParseError) as e:
+        config.log_error("web", f"fetch de búsqueda: {type(e).__name__}: {e}")
+        return []
 
 
 def seccion_md(consulta: str, n: int = 3) -> str:

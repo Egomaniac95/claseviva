@@ -2,6 +2,8 @@
 PyAudioWPatch>=0.2.12.7
 # Imports directos del runtime: no depender de que Whisper/pycaw los arrastren.
 numpy>=2.0
+# Silero VAD local en CPU, comparte runtime ONNX con OCR; no requiere PyTorch.
+onnxruntime>=1.16.1,<2
 # Decodifica notas de voz WebM/Opus del navegador; no ejecuta STT local.
 av>=18,<19
 psutil>=5.9

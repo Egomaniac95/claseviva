@@ -122,7 +122,7 @@ def test_estabilidad_larga_hace_un_jpeg_un_ocr_y_heartbeats_espaciados(
     assert sum(bool(_campo(r, "heartbeat")) for r in resultados) == 4
     assert not any(bool(_campo(r, "discarded")) for r in resultados)
     assert llamadas_ocr == [1]
-    assert len(list(img_dir.glob("*.jpg"))) == 1
+    assert len(list(img_dir.glob("*.webp"))) == 1
     assert len(_filas(img_log)) == 1
     eventos = _filas(timeline)
     assert [fila["t"] for fila in eventos if fila["evento"] == "heartbeat"] == [
@@ -165,7 +165,7 @@ def test_cambio_visual_relevante_se_conserva_durante_silencio_sin_forzar_ocr(
     assert _campo(cambio, "ocr_ran") is False
     assert _campo(cambio, "discarded") is False
     assert len(llamadas_ocr) == 1
-    assert len(list(img_dir.glob("*.jpg"))) == 2
+    assert len(list(img_dir.glob("*.webp"))) == 2
     filas = _filas(img_log)
     assert len(filas) == 2
     assert filas[-1]["audio_estado"] == "silencio"
@@ -205,7 +205,7 @@ def test_cambios_frecuentes_no_generan_backlog_y_acotan_ocr(
         for r in resultados
     )
     assert 1 <= len(llamadas_ocr) <= 3
-    assert len(list(img_dir.glob("*.jpg"))) == 25
+    assert len(list(img_dir.glob("*.webp"))) == 25
 
     snapshot = pipeline.snapshot()
     assert snapshot["frames_observed"] == 25

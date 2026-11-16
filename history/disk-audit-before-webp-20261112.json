@@ -1,0 +1,60 @@
+{
+  "root": "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva",
+  "folders": {
+    ".cache": {
+      "bytes": 1018612,
+      "files": 17
+    },
+    ".git": {
+      "bytes": 8609520,
+      "files": 335
+    },
+    ".pytest_cache": {
+      "bytes": 46325,
+      "files": 4
+    },
+    ".venv": {
+      "bytes": 569154645,
+      "files": 10263
+    },
+    "assets": {
+      "bytes": 2486919,
+      "files": 7
+    },
+    "backups": {
+      "bytes": 0,
+      "files": 0
+    },
+    "contenido": {
+      "bytes": 155207072,
+      "files": 1388
+    },
+    "dist": {
+      "bytes": 514517390,
+      "files": 487
+    },
+    "history": {
+      "bytes": 7070908,
+      "files": 43
+    },
+    "logs": {
+      "bytes": 3855220,
+      "files": 26
+    },
+    "scripts": {
+      "bytes": 270552,
+      "files": 24
+    },
+    "src": {
+      "bytes": 3558337,
+      "files": 87
+    },
+    "tests": {
+      "bytes": 2987496,
+      "files": 90
+    }
+  },
+  "root_files_bytes": 112238,
+  "external_root": "D:\\05_Maestria_UNSA\\3.SEMESTRE_III\\7.INFRAESTRUCTURA",
+  "total_bytes": 1268895234
+}

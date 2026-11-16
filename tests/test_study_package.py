@@ -161,7 +161,7 @@ def test_paquete_ligero_conserva_solo_final_e_imagenes_referenciadas(tmp_path):
         d, evidence_safe=True)
 
     assert report["ok"] is True
-    assert sorted(path.name for path in d.iterdir()) == ["img", "leccion_final.md"]
+    assert sorted(path.name for path in d.iterdir()) == ["img", "leccion_final.html", "leccion_final.md"]
     assert sorted(path.name for path in (d / "img").iterdir()) == ["keep.jpg"]
     assert study_package.validate_candidate(d)["ok"] is True
 
@@ -331,7 +331,12 @@ def test_cli_cierra_en_paquete_ligero_por_defecto_y_auditoria_es_opt_in(
         monkeypatch, tmp_path):
     d = tmp_path / "clase"
     d.mkdir()
-    (d / "session_state.json").write_text("{}", encoding="utf-8")
+    estado.escribir_estado(d, {"estado": "fin", "parte": 1, "inicio": 1000.})
+    (d / "img").mkdir()
+    Image.new("RGB", (20, 20), "white").save(d / "img" / "keep.jpg")
+    (d / "leccion_final.md").write_text(_lesson(), encoding="utf-8")
+    from src.lesson_export import export_html
+    export_html(d)
     calls = []
     monkeypatch.setattr(
         post_procesar, "consolidar_todo",

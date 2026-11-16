@@ -1,0 +1,76 @@
+﻿{
+    "kind":  "retired_qa_environment_and_runtime_logs",
+    "paths":  [
+                  {
+                      "path":  "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\.venv-qa",
+                      "files":  2756,
+                      "bytes":  259242755
+                  },
+                  {
+                      "path":  "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\.qa-tmp-vad",
+                      "files":  2,
+                      "bytes":  32061
+                  },
+                  {
+                      "path":  "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\.qa-tmp-final-vad",
+                      "files":  1446,
+                      "bytes":  3784296
+                  },
+                  {
+                      "path":  "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\.qa-tmp-capture-admission",
+                      "files":  96,
+                      "bytes":  70996
+                  },
+                  {
+                      "path":  "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\.qa-tmp-final-integrated",
+                      "files":  1471,
+                      "bytes":  3790902
+                  },
+                  {
+                      "path":  "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\.qa-tmp-final-render",
+                      "files":  13,
+                      "bytes":  7988
+                  },
+                  {
+                      "path":  "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\.qa-tmp-last-render",
+                      "files":  13,
+                      "bytes":  7988
+                  },
+                  {
+                      "path":  "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\logs\\captura_audio.log",
+                      "files":  1,
+                      "bytes":  9673
+                  },
+                  {
+                      "path":  "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\logs\\captura_pantalla.log",
+                      "files":  1,
+                      "bytes":  8312
+                  },
+                  {
+                      "path":  "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\logs\\errores.log",
+                      "files":  1,
+                      "bytes":  9674
+                  },
+                  {
+                      "path":  "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\logs\\escriba.log",
+                      "files":  1,
+                      "bytes":  32731
+                  },
+                  {
+                      "path":  "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\logs\\lanzador.log",
+                      "files":  1,
+                      "bytes":  2118580
+                  },
+                  {
+                      "path":  "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\logs\\panel_latido.txt",
+                      "files":  1,
+                      "bytes":  18
+                  },
+                  {
+                      "path":  "D:\\05_Maestria_UNSA\\2.SEMESTRE_II\\06_INTELIGENCIA_ARTIFICIAL\\clase-viva\\logs\\transcriptor_vivo.log",
+                      "files":  1,
+                      "bytes":  200918
+                  }
+              ],
+    "bytes_removed":  269316892
+}

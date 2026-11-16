@@ -1,0 +1,242 @@
+{
+  "browser": "Microsoft Edge 157.0.4341.46",
+  "ok": true,
+  "images_checked": 39,
+  "folders_checked": 13,
+  "images": [
+    {
+      "src": "file:///D:/05_Maestria_UNSA/2.SEMESTRE_II/06_INTELIGENCIA_ARTIFICIAL/clase-viva/contenido/cita-medica-angel/clases/CLASE_01_consulta-general-essalud/img/cap_001793396600_p1.webp",
+      "ok": true,
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/2.SEMESTRE_II/06_INTELIGENCIA_ARTIFICIAL/clase-viva/contenido/cita-medica-angel/clases/CLASE_01_consulta-general-essalud/img/cap_001793396982_p1.webp",
+      "ok": true,
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/2.SEMESTRE_II/06_INTELIGENCIA_ARTIFICIAL/clase-viva/contenido/cita-medica-angel/clases/CLASE_01_consulta-general-essalud/img/cap_001793397110_p1.webp",
+      "ok": true,
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/2.SEMESTRE_II/06_INTELIGENCIA_ARTIFICIAL/clase-viva/contenido/maestria-inteligencia-artificial/clases/CLASE_01_clase-1/img/cap_001784125922_p1.webp",
+      "ok": true,
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/2.SEMESTRE_II/06_INTELIGENCIA_ARTIFICIAL/clase-viva/contenido/maestria-inteligencia-artificial/clases/CLASE_01_clase-1/img/cap_001784130661_p1.webp",
+      "ok": true,
+      "width": 1916,
+      "height": 854
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/2.SEMESTRE_II/06_INTELIGENCIA_ARTIFICIAL/clase-viva/contenido/maestria-inteligencia-artificial/clases/CLASE_01_clase-1/img/cap_001784306112_p2.webp",
+      "ok": true,
+      "width": 958,
+      "height": 782
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/2.SEMESTRE_II/06_INTELIGENCIA_ARTIFICIAL/clase-viva/contenido/maestria-inteligencia-artificial/clases/CLASE_02_clase2/img/cap_001784817889_p1.webp",
+      "ok": true,
+      "width": 1678,
+      "height": 1079
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/2.SEMESTRE_II/06_INTELIGENCIA_ARTIFICIAL/clase-viva/contenido/maestria-inteligencia-artificial/clases/CLASE_02_clase2/img/cap_001784823601_p1.webp",
+      "ok": true,
+      "width": 1678,
+      "height": 1079
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/2.SEMESTRE_II/06_INTELIGENCIA_ARTIFICIAL/clase-viva/contenido/maestria-inteligencia-artificial/clases/CLASE_02_clase2/img/consulta_1784827624093.webp",
+      "ok": true,
+      "width": 1678,
+      "height": 1079
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/2.SEMESTRE_II/06_INTELIGENCIA_ARTIFICIAL/clase-viva/contenido/maestria-inteligencia-artificial/clases/CLASE_03_clase-2/img/cap_001784860774_p1.webp",
+      "ok": true,
+      "width": 1920,
+      "height": 804
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/2.SEMESTRE_II/06_INTELIGENCIA_ARTIFICIAL/clase-viva/contenido/maestria-inteligencia-artificial/clases/CLASE_03_clase-2/img/cap_001784862623_p1.webp",
+      "ok": true,
+      "width": 1692,
+      "height": 1140
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/2.SEMESTRE_II/06_INTELIGENCIA_ARTIFICIAL/clase-viva/contenido/maestria-inteligencia-artificial/clases/CLASE_03_clase-2/img/cap_001784905013_p2.webp",
+      "ok": true,
+      "width": 1683,
+      "height": 1013
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/2.SEMESTRE_II/06_INTELIGENCIA_ARTIFICIAL/clase-viva/contenido/maestria-inteligencia-artificial/clases/CLASE_04_clase-3/img/cap_001785593038_p1.webp",
+      "ok": true,
+      "width": 929,
+      "height": 823
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/2.SEMESTRE_II/06_INTELIGENCIA_ARTIFICIAL/clase-viva/contenido/maestria-inteligencia-artificial/clases/CLASE_04_clase-3/img/cap_001785594849_p1.webp",
+      "ok": true,
+      "width": 929,
+      "height": 823
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/2.SEMESTRE_II/06_INTELIGENCIA_ARTIFICIAL/clase-viva/contenido/maestria-inteligencia-artificial/clases/CLASE_04_clase-3/img/cap_001785599195_p1.webp",
+      "ok": true,
+      "width": 929,
+      "height": 823
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/2.SEMESTRE_II/06_INTELIGENCIA_ARTIFICIAL/clase-viva/contenido/maestria-inteligencia-artificial/clases/CLASE_05_clase-semana-4/img/cap_001786199868_p1.webp",
+      "ok": true,
+      "width": 934,
+      "height": 936
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/2.SEMESTRE_II/06_INTELIGENCIA_ARTIFICIAL/clase-viva/contenido/maestria-inteligencia-artificial/clases/CLASE_05_clase-semana-4/img/cap_001786206513_p1.webp",
+      "ok": true,
+      "width": 1039,
+      "height": 920
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/2.SEMESTRE_II/06_INTELIGENCIA_ARTIFICIAL/clase-viva/contenido/maestria-inteligencia-artificial/clases/CLASE_05_clase-semana-4/img/cap_001786223923_p2.webp",
+      "ok": true,
+      "width": 936,
+      "height": 877
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/2.SEMESTRE_II/06_INTELIGENCIA_ARTIFICIAL/clase-viva/contenido/maestria-inteligencia-artificial/clases/CLASE_06_ultima-clase/img/cap_001788382947_p1.webp",
+      "ok": true,
+      "width": 936,
+      "height": 633
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/2.SEMESTRE_II/06_INTELIGENCIA_ARTIFICIAL/clase-viva/contenido/maestria-inteligencia-artificial/clases/CLASE_06_ultima-clase/img/cap_001788384805_p1.webp",
+      "ok": true,
+      "width": 936,
+      "height": 633
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/2.SEMESTRE_II/06_INTELIGENCIA_ARTIFICIAL/clase-viva/contenido/maestria-inteligencia-artificial/clases/CLASE_06_ultima-clase/img/cap_001788386128_p1.webp",
+      "ok": true,
+      "width": 936,
+      "height": 633
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/2.SEMESTRE_II/06_INTELIGENCIA_ARTIFICIAL/clase-viva/contenido/visualizacion-de-datos/clases/CLASE_01_semana-2/img/cap_001794059775_p1.webp",
+      "ok": true,
+      "width": 1920,
+      "height": 804
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/2.SEMESTRE_II/06_INTELIGENCIA_ARTIFICIAL/clase-viva/contenido/visualizacion-de-datos/clases/CLASE_01_semana-2/img/cap_001794086153_p2.webp",
+      "ok": true,
+      "width": 916,
+      "height": 510
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/2.SEMESTRE_II/06_INTELIGENCIA_ARTIFICIAL/clase-viva/contenido/visualizacion-de-datos/clases/CLASE_01_semana-2/img/consulta_1794061567198.webp",
+      "ok": true,
+      "width": 1572,
+      "height": 1155
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/3.SEMESTRE_III/7.INFRAESTRUCTURA/SEMANA_1/CLASE_APUNTE/img/cap_001789352341_p1.webp",
+      "ok": true,
+      "width": 1920,
+      "height": 804
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/3.SEMESTRE_III/7.INFRAESTRUCTURA/SEMANA_1/CLASE_APUNTE/img/cap_001789359559_p1.webp",
+      "ok": true,
+      "width": 1643,
+      "height": 879
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/3.SEMESTRE_III/7.INFRAESTRUCTURA/SEMANA_1/CLASE_APUNTE/img/cap_001789361447_p1.webp",
+      "ok": true,
+      "width": 1643,
+      "height": 879
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/3.SEMESTRE_III/7.INFRAESTRUCTURA/SEMANA_2_HADOOP_MAP_REDUCE/0.APUNTES_CLASE/img/cap_001789825743_p1.webp",
+      "ok": true,
+      "width": 960,
+      "height": 922
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/3.SEMESTRE_III/7.INFRAESTRUCTURA/SEMANA_2_HADOOP_MAP_REDUCE/0.APUNTES_CLASE/img/cap_001789828144_p1.webp",
+      "ok": true,
+      "width": 960,
+      "height": 922
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/3.SEMESTRE_III/7.INFRAESTRUCTURA/SEMANA_2_HADOOP_MAP_REDUCE/0.APUNTES_CLASE/img/cap_001789837327_p1.webp",
+      "ok": true,
+      "width": 934,
+      "height": 962
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/3.SEMESTRE_III/7.INFRAESTRUCTURA/SEMANA_3_SPARK/0.APUNTES/img/cap_001790431144_p1.webp",
+      "ok": true,
+      "width": 1920,
+      "height": 804
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/3.SEMESTRE_III/7.INFRAESTRUCTURA/SEMANA_3_SPARK/0.APUNTES/img/cap_001790438395_p1.webp",
+      "ok": true,
+      "width": 939,
+      "height": 557
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/3.SEMESTRE_III/7.INFRAESTRUCTURA/SEMANA_3_SPARK/0.APUNTES/img/consulta_1790439779347.webp",
+      "ok": true,
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/3.SEMESTRE_III/7.INFRAESTRUCTURA/SEMANA_4/0_APUNTES_TEORIA/img/cap_001791640482_p1.webp",
+      "ok": true,
+      "width": 1920,
+      "height": 1080
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/3.SEMESTRE_III/7.INFRAESTRUCTURA/SEMANA_4/0_APUNTES_TEORIA/img/cap_001791646582_p1.webp",
+      "ok": true,
+      "width": 1908,
+      "height": 1029
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/3.SEMESTRE_III/7.INFRAESTRUCTURA/SEMANA_4/0_APUNTES_TEORIA/img/cap_001791668130_p2.webp",
+      "ok": true,
+      "width": 918,
+      "height": 544
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/3.SEMESTRE_III/7.INFRAESTRUCTURA/SEMANA_5_FLINK/0_APUNTE_TEORIA/img/cap_001792245592_p1.webp",
+      "ok": true,
+      "width": 961,
+      "height": 939
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/3.SEMESTRE_III/7.INFRAESTRUCTURA/SEMANA_5_FLINK/0_APUNTE_TEORIA/img/cap_001792256761_p2.webp",
+      "ok": true,
+      "width": 944,
+      "height": 904
+    },
+    {
+      "src": "file:///D:/05_Maestria_UNSA/3.SEMESTRE_III/7.INFRAESTRUCTURA/SEMANA_5_FLINK/0_APUNTE_TEORIA/img/consulta_1792257691180.webp",
+      "ok": true,
+      "width": 944,
+      "height": 904
+    }
+  ]
+}

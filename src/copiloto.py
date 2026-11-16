@@ -11,13 +11,9 @@ import sys
 import time
 from pathlib import Path
 
-from . import audio_sesiones
-from . import config
-from . import costos_api
+from . import audio_sesiones, config, costos_api, escriba, ocr
 from . import estado as est
-from . import escriba
-from . import ocr
-from .deepseek_client import preguntar
+from .deepseek_client import preguntar_detalle
 
 AYUDA = """
 Comandos:
@@ -101,10 +97,17 @@ def responder(d: Path, pregunta: str, sistema_extra: str = "", extra_usuario: st
                f"=== TRANSCRIPCIÓN CANÓNICA RECIENTE (45 min) ===\n{transcript_reciente(d)}\n\n"
                + extra_usuario +
                f"=== PREGUNTA ===\n{pregunta}")
-    r = preguntar([{"role": "system", "content": sistema},
+    r = preguntar_detalle([{"role": "system", "content": sistema},
                    {"role": "user", "content": usuario}],
-                  max_tokens=1800, etiqueta="copiloto")
-    return r if r is not None else "⚠️ La API no respondió (3 intentos). Reintenta en un momento."
+                  max_tokens=3200, etiqueta="copiloto", thinking=False)
+    texto = r.get("texto")
+    if not texto:
+        return "⚠️ La API no respondió. Reintenta en un momento."
+    if r.get("finish_reason") == "length":
+        texto += ("\n\n> ⚠️ La respuesta alcanzó el límite de extensión y puede estar "
+                  "incompleta. Puedes pedir que continúe; no se realizan consultas "
+                  "adicionales automáticamente.")
+    return texto
 
 
 def registrar_qa(d: Path, pregunta: str, respuesta: str) -> None:
@@ -113,13 +116,13 @@ def registrar_qa(d: Path, pregunta: str, respuesta: str) -> None:
 
 
 def capturar_para_pregunta(d: Path) -> str:
-    """Captura la pantalla AHORA y solo guarda el JPEG. No hace OCR ni llama a DeepSeek."""
+    """Captura la pantalla AHORA y guarda WebP 85, sin OCR ni llamadas remotas."""
     from .captura_pantalla import capturar_ahora, guardar_liviana  # import tardío
 
     st = est.leer_estado(d)
     img = capturar_ahora(monitor=st.get("monitor"), region=st.get("region"))
     epoch = int(time.time() * 1000)
-    nombre = f"consulta_{epoch:013d}.jpg"
+    nombre = f"consulta_{epoch:013d}.webp"
     guardar_liviana(img, d / "img" / nombre)
     return nombre
 
@@ -128,7 +131,7 @@ def descartar_captura_previa(d: Path, nombre: str) -> None:
     """Elimina solo un preview efímero que aún no fue publicado en ``qa.md``."""
     raw = str(nombre or "").strip()
     safe_name = Path(raw).name
-    if raw != safe_name or not re.fullmatch(r"consulta_\d{13}\.jpg", safe_name):
+    if raw != safe_name or not re.fullmatch(r"consulta_\d{13}\.(?:jpg|webp)", safe_name):
         raise ValueError("nombre de captura previa inválido")
     qa = d / "qa.md"
     if qa.is_file() and safe_name in qa.read_text(encoding="utf-8"):
@@ -197,7 +200,7 @@ def main() -> int:
         elif linea.startswith("/fuente"):
             arg = linea[len("/fuente"):].strip().lower().replace("edge", "msedge") \
                 .replace("msmsedge", "msedge")
-            if arg in ("chrome", "msedge", "sistema"):
+            if audio_sesiones.fuente_valida(arg):
                 est.actualizar_estado(d, fuente=arg)
                 extra = ""
                 if arg != "sistema" and audio_sesiones.disponible():

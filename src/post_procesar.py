@@ -25,6 +25,8 @@ import time
 import unicodedata
 import wave
 import zipfile
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -40,9 +42,10 @@ from . import incremental_jsonl
 from . import math_render
 from . import study_package
 from . import student_notes
+from . import stt_usage
 from . import transcript_quality
 from . import visual_materials
-from .deepseek_client import preguntar
+from .deepseek_client import preguntar as _preguntar_api
 from .transcriptor_vivo import (
     diagnosticar_repeticion_lineas,
     filtrar_lineas_repetitivas,
@@ -60,12 +63,41 @@ TRANSCRIPT_CERCA_WAV_SEG = 90
 OCR_MAX_CHARS = 700
 SLIDE_PRE_SEG = float(os.environ.get("CLASE_POST_SLIDE_PRE_SEG", "20"))
 SLIDE_POST_SEG = float(os.environ.get("CLASE_POST_SLIDE_POST_SEG", "90"))
-POST_VERSION = "post_v32_remote_stt_math_notes"
-SLIDE_GUIDED_VERSION = "slide_guided_v30_grounded_visual_context"
+POST_VERSION = "post_v34_detailed_grounded_study_material"
+SLIDE_GUIDED_VERSION = "slide_guided_v31_complete_speech_and_code"
 MERGE_VERSION = "merge_v4_concept_map_and_math_contract"
-SUMMARY_VERSION = "summary_v3_balanced_integrated_lesson"
+SUMMARY_VERSION = "summary_v4_balanced_tranches"
 OCR_CACHE_VERSION = "full_frame_v1"
 _OCR_CACHE_BY_CLASS: dict[str, dict[tuple[str, str, str], str]] = {}
+_EXIGIR_APIS = ContextVar("post_exigir_apis", default=False)
+_TAREAS_NO_PREPARADAS = object()
+
+
+class ConsolidationApiError(RuntimeError):
+    pass
+
+
+def _validar_respuesta_api(respuesta, etiqueta: str):
+    if _EXIGIR_APIS.get() and (respuesta is None or not str(respuesta).strip()):
+        raise ConsolidationApiError(
+            f"DeepSeek no respondió en {etiqueta or 'consolidación'}. "
+            "Los audios y avances están conservados. Revisa la red o el firewall "
+            "y vuelve a pulsar Consolidar.")
+    return respuesta
+
+
+def preguntar(*args, **kwargs):
+    return _validar_respuesta_api(_preguntar_api(*args, **kwargs), str(kwargs.get("etiqueta") or ""))
+
+
+@contextmanager
+def api_errors_fatal():
+    """La consolidación solicitada por el usuario nunca convierte fallo de API en éxito."""
+    token = _EXIGIR_APIS.set(True)
+    try:
+        yield
+    finally:
+        _EXIGIR_APIS.reset(token)
 
 
 def _lineas_gasto_api(resumen: dict) -> list[str]:
@@ -130,7 +162,9 @@ PROMPT_RESUMEN = (
     "los temas ya publicados con el contenido nuevo: el resultado debe representar TODA la "
     "clase. No uses 'primera parte', 'segunda parte' ni el bloque de grabacion como estructura "
     "pedagogica, salvo que la propia clase declare una ruptura tematica real. Cierra todas "
-    "las frases y listas; no abras un punto que no puedas completar."
+    "las frases y listas; no abras un punto que no puedas completar. Una frase pendiente "
+    "al final de un tramo puede quedar resuelta en el siguiente: contrasta los tramos "
+    "posteriores antes de presentarla como una limitación de toda la clase."
 )
 
 PROMPT_TAREAS = (
@@ -161,7 +195,7 @@ PROMPT_TEJIDO = (
     "valor. Si hay ambigüedad, deja una nota breve con la marca de hora.\n"
     "- ESTRUCTURA TEJIDA: '## <tema>' y párrafos de teoría; cuando el contenido corresponda a "
     "una diapositiva, inserta en su PROPIA línea el marcador con el formato EXACTO\n"
-    "[[IMG:archivo.jpg|lectura guiada de 3-5 frases: qué se ve, cómo se interpreta, "
+    "[[IMG:archivo.webp|lectura guiada de 3-5 frases: qué se ve, cómo se interpreta, "
     "cómo se conecta con la explicación y por qué importa]]\n"
     "y DEBAJO continúa AHONDANDO en la teoría de ese tema (definiciones, intuición, fórmulas, "
     "ejemplos, por qué importa). Alterna así: teoría → imagen → más teoría → siguiente "
@@ -207,13 +241,13 @@ PROMPT_CHUNK_DETALLADO = (
     "Redacta apuntes detallados de este tramo de clase en Markdown. La fuente principal es "
     "la TRANSCRIPCION completa del rango; las imagenes y OCR son evidencia de apoyo. No "
     "atribuyas al profesor las líneas [INTERVENCIÓN DEL ESTUDIANTE]; son aportes locales "
-    "que deben quedar identificados. "
+    "que deben quedar identificados. No "
     "resumas en exceso: conserva cronologia local, definiciones, pasos, ejemplos, analogias, "
     "nombres propios, cifras, formulas, codigo, preguntas, tareas y cambios de tema. "
     "Conserva cada detalle tecnico unico, pero colapsa replays, reformulaciones equivalentes "
     "y repeticiones sin informacion nueva. Usa marcadores de imagen solo "
     "cuando una ficha aporte evidencia real, con el formato exacto "
-    "[[IMG:archivo.jpg|lectura guiada de 3-5 frases que explique la evidencia y su "
+    "[[IMG:archivo.webp|lectura guiada de 3-5 frases que explique la evidencia y su "
     "relación con el concepto]]. Si falta audio o hay un "
     "gap de cobertura, declaralo explicitamente y no reconstruyas una clase larga desde "
     "capturas silenciosas. No pegues bloques de transcript ni citas largas: parafrasea y "
@@ -224,12 +258,28 @@ PROMPT_CHUNK_DETALLADO = (
 )
 
 PROMPT_SLIDE_GUIDED = (
-    "Reconstruye SOLO este tramo como material de estudio detallado en Markdown. La fuente "
+    "Reconstruye SOLO este tramo como material de estudio detallado en Markdown. "
+    "Conserva TODO el contenido docente único recuperable del tramo: definiciones, "
+    "subtemas, razonamientos, ejemplos, analogías, cifras, fórmulas, decisiones, errores "
+    "y correcciones, preguntas y respuestas, tareas, advertencias y digresiones. "
+    "Desarrolla cada explicación con sus pasos y motivos, aunque no tenga una imagen. "
+    "Elimina únicamente repeticiones vacías y muletillas; evita condensar una demostración "
+    "en una enumeración de conclusiones. "
+    "Cuando se dicte o muestre código legible, conserva el fragmento sustentado en un "
+    "bloque Markdown con su lenguaje y explica entradas, parámetros, operaciones, salida "
+    "y decisiones. Conserva nombres de archivos, funciones, comandos y resultados "
+    "verificados. Un nombre de función aislado no autoriza completar su implementación. "
+    "Si el fragmento es incompleto o ilegible, declara qué parte falta y explica solo "
+    "lo respaldado. Puedes añadir pseudocódigo o un ejemplo complementario cuando ayude, "
+    "rotulado como ampliación técnica, separándolo del código registrado. "
+    "Conserva citas breves cuando su formulación sea necesaria para comprender una "
+    "definición, pregunta, respuesta o instrucción, con atribución y contexto. "
+    "La fuente "
     "dominante y obligatoria es la TRANSCRIPCION: las slides/capturas solo ubican "
     "diapositivas, codigo, diagramas o evidencia visual. Para cada slide enviada, explica "
     "que muestra y que dijo el profesor en su transcript asociado. Formato preferido: "
     "imagen antes o junto a la explicacion, usando SOLO marcadores deterministas "
-    "[[IMG:archivo.jpg|lectura guiada de 3-5 frases y aproximadamente 70-140 palabras: "
+    "[[IMG:archivo.webp|lectura guiada de 3-5 frases y aproximadamente 70-140 palabras: "
     "qué se ve, cómo debe leerse, cómo se conecta con la explicación y por qué importa]]. "
     "No inventes nombres de archivos. "
     "Agrupa marcadores equivalentes bajo un único concepto y conserva solo el estado que "
@@ -259,8 +309,8 @@ PROMPT_SLIDE_GUIDED = (
     "una cifra o fórmula, conserva ambas con su procedencia y marca revisión. Ignora barras "
     "laterales, recomendaciones, controles, chat, cursor y texto periférico de una aplicación. "
     "Nunca uses como título o identidad un nombre que aparezca solo en ese texto periférico. "
-    "No pegues bloques rotulados Transcript/Transcripcion ni citas largas del STT: integra "
-    "su contenido mediante prosa academica corregida. No publiques correos, telefonos, "
+    "Integra el habla mediante prosa académica corregida y conserva las formulaciones "
+    "literales y el código que aportan precisión. No publiques correos, telefonos, "
     "listas de participantes ni identidades de estudiantes irrelevantes; sustituyelos por "
     "una referencia generica. Las afirmaciones empresariales, biograficas, estadisticas o "
     "actuales que no esten corroboradas deben quedar como 'Segun lo expuesto en clase' y "
@@ -272,7 +322,9 @@ PROMPT_SLIDE_GUIDED = (
     "como adorno repetitivo ni sustituyas explicaciones por iconos. Para cada marcador, "
     "escribe una lectura guiada autosuficiente y concreta: qué se ve, qué elementos debe "
     "seguir el estudiante, qué idea demuestra, cómo se conecta con el desarrollo y por qué "
-    "importa. Evita captions de una sola oración. "
+    "importa cuando la evidencia permita explicarlo. Usa únicamente observaciones "
+    "concretas de esa figura; evita instrucciones genéricas aplicables a cualquier "
+    "fórmula o captura y no alargues la leyenda con relleno. "
     "Integra la evidencia en prosa: nunca publiques rótulos como 'OCR de la diapositiva', "
     "'Lo que dijo el profesor', 'transcript asociado' o 'continuación sin diapositivas', "
     "'Qué muestra la diapositiva' o 'Qué dice el profesor', "
@@ -280,13 +332,17 @@ PROMPT_SLIDE_GUIDED = (
     "solo lo corroborado y descarta caracteres rotos, menús y texto periférico. No cierres "
     "el tramo con otro resumen; el panorama global se genera por separado. "
     "No afirmes que una persona trabaja 'actualmente' en una organización sin una fuente "
-    "externa fechada; si procede del audio, atribúyelo al profesor y al momento de la grabación."
+    "externa fechada; si procede del audio, atribúyelo al profesor y al momento de la grabación. "
+    "Los fragmentos anterior y siguiente son contexto para resolver frases partidas y "
+    "correcciones entre tramos. Desarrolla la transcripción del rango actual y usa ese "
+    "contexto solo para enlazarla. Un corte entre tramos no demuestra audio perdido: "
+    "si la explicación sigue en el fragmento siguiente, indícalo como continuidad."
 )
 
 PROMPT_SLIDES_SUPLEMENTARIAS = (
     "Genera SOLO bloques visuales complementarios para las slides de esta tanda. No "
     "reescribas la leccion ni vuelvas a explicar todo el tramo. Para cada ficha devuelve "
-    "exactamente una linea [[IMG:archivo.jpg|lectura visual fiel de 3-5 frases: evidencia, "
+    "exactamente una linea [[IMG:archivo.webp|lectura visual fiel de 3-5 frases: evidencia, "
     "interpretación, conexión conceptual y utilidad para estudiar]] y, solo cuando haga "
     "falta, un parrafo breve inmediatamente "
     "debajo. Incluye todas las slides recibidas una sola vez, no inventes archivos y no "
@@ -599,13 +655,49 @@ def _transcripcion_cruda_md(segs: list[dict], origen: str,
     return "\n".join(lineas).strip() + "\n"
 
 
+def _texto_desarrollo_para_cobertura(markdown: str) -> str:
+    """Mide la explicación sin contar inventarios, registro fuente ni captions."""
+    texto = study_package.strip_source_transcript(study_package.strip_metadata(markdown))
+    texto = re.sub(r"(?is)<details\b[^>]*>.*?</details>", "", texto)
+    texto = re.sub(r"(?m)^\|[^\n]*<img\b[^\n]*\|[ \t]*$", "", texto)
+    texto = re.sub(r"\[\[IMG:[^\n]*?\]\]", "", texto)
+    texto = RE_MD_IMG.sub("", texto)
+    texto = re.sub(r"<[^>]+>", " ", texto)
+    return re.sub(r"\s+", " ", texto).strip()
+
+
 def _leccion_demasiado_corta(final_txt: str, segs: list[dict]) -> bool:
     trans = _texto_segs(segs)
     if len(trans) < 1000:
         return False
-    visible = re.sub(r"<[^>]+>", " ", final_txt)
-    visible = re.sub(r"\s+", " ", visible).strip()
-    return len(visible) < max(900, int(len(trans) * 0.12))
+    visible = _texto_desarrollo_para_cobertura(final_txt)
+    # Señal de compresión excesiva, no prueba de cobertura semántica. La fuente
+    # completa se archiva independientemente de esta proporción.
+    return len(visible) < max(900, int(len(trans) * 0.35))
+
+
+def _ampliar_guion_breve(d: Path, cuerpo: str, segs: list[dict],
+                         prompt_usuario: str, etiqueta: str) -> tuple[str, int]:
+    """Reintenta una vez el desarrollo comprimido y conserva la versión más extensa."""
+    if not _post_llm_enabled() or not _leccion_demasiado_corta(cuerpo, segs):
+        return cuerpo, 0
+    ampliado = preguntar_cacheado(
+        d,
+        [{"role": "system", "content": PROMPT_SLIDE_GUIDED + (
+            "\nEl borrador anterior desarrolló muy poco contenido del rango. Revisa la "
+            "transcripción completa y devuelve un desarrollo que recupere los ejemplos, "
+            "razonamientos, procedimientos, código sustentado y preguntas omitidos. "
+            "No aumentes longitud repitiendo captions, encabezados o frases de relleno.")},
+         {"role": "user", "content": prompt_usuario + "\n\nBORRADOR A AMPLIAR:\n" + cuerpo}],
+        max_tokens=POST_MAX_TOKENS, etiqueta=etiqueta + "-detalle",
+        prompt_version=f"{POST_VERSION}:{SLIDE_GUIDED_VERSION}:detalle")
+    report = getattr(preguntar_cacheado, "ultimo_reporte", {})
+    llamadas = int(report.get("llm") != "disabled" and not report.get("hit"))
+    if not _respuesta_vacia(ampliado):
+        ampliado = _sanear_contenido_llm_publico(str(ampliado))
+        if len(_texto_desarrollo_para_cobertura(ampliado)) > len(_texto_desarrollo_para_cobertura(cuerpo)):
+            cuerpo = ampliado
+    return cuerpo, llamadas
 
 
 def _palabras_clave(txt: str) -> set[str]:
@@ -994,8 +1086,13 @@ def _wav_t(wav_path: Path) -> float | None:
     return float(m.group(1)) if m else None
 
 
-def _wav_t_rel(wav_path: Path, origen) -> float | None:
-    t = _wav_t(wav_path)
+def _wav_t_rel(wav_path: Path, origen, manifest_row: dict | None = None) -> float | None:
+    # El nombre reserva la adquisición; el PCM puede empezar después o proceder
+    # de un stream persistente. STT y cobertura deben usar el mismo reloj fuente.
+    row = manifest_row or {}
+    t = row.get("pcm_wall_start", row.get("wall_start"))
+    if t is None:
+        t = _wav_t(wav_path)
     if t is None:
         return None
     return _normalizar_valor_tiempo(t, origen)
@@ -1047,6 +1144,10 @@ def _wav_metricas_manifest(row: dict | None) -> dict | None:
         peak = int(row["peak"])
         duration = float(row.get("duration", row.get("duration_sec", 0)) or 0)
     except (TypeError, ValueError):
+        return None
+    if rms == 0 and peak == 0:
+        # Los manifests antiguos muestreaban amplitudes y podían omitir señal.
+        # Confirma silencio leyendo el WAV; una ausencia muestreada no basta.
         return None
     return {
         "rms": rms,
@@ -1516,7 +1617,7 @@ def analizar_cobertura_audio(d: Path, segs: list[dict],
         rms = metricas_wav_local.get("rms")
         peak = metricas_wav_local.get("peak")
         util = bool(metricas_wav_local.get("useful_audio"))
-        t_wav = _wav_t_rel(wav_path, origen)
+        t_wav = _wav_t_rel(wav_path, origen, manifest_rows.get(wav_path.stem))
         info = {"archivo": wav_path.name, "t": t_wav,
                 "t_original": _wav_t(wav_path), "rms": rms, "peak": peak,
                 "useful_audio": util}
@@ -1578,7 +1679,7 @@ def analizar_cobertura_audio(d: Path, segs: list[dict],
 
     continuidad = continuidad_audio_contextual(d)
     if continuidad.get("status") == "warning":
-        advertencias.append("continuidad PCM con deficit o gaps; se difiere limpieza")
+        advertencias.append("continuidad PCM con deficit o gaps; revisar límites de la grabación")
         limpieza_segura = False
         if estado_cov == "ok":
             estado_cov = "dudosa"
@@ -1593,7 +1694,8 @@ def analizar_cobertura_audio(d: Path, segs: list[dict],
         "wav_util_sin_transcript": wav_util_sin_transcript,
         "wav_sin_transcript": comparacion_chunks["wav_sin_transcript"][:10],
         "wav_sin_transcript_total": len(comparacion_chunks["wav_sin_transcript"]),
-        "commits_vacios": comparacion_chunks["commits_vacios"][:10],
+        # Se conserva la lista completa para emparejar cada WAV en clases largas.
+        "commits_vacios": comparacion_chunks["commits_vacios"],
         "commits_vacios_total": len(comparacion_chunks["commits_vacios"]),
         "stt_invalidos_total": comparacion_chunks["stt"]["invalid_count"],
         "transcript_wav_faltante": comparacion_chunks["transcript_wav_faltante"][:10],
@@ -1635,7 +1737,7 @@ def _cobertura_md(cobertura: dict) -> str:
     if cobertura.get("periodos_con_capturas_sin_audio"):
         lineas.append("")
         lineas.append("> Tramo sin audio detectado; solo se conserva evidencia visual parcial.")
-    if not cobertura.get("limpieza_segura", True):
+    if not cobertura.get("limpieza_segura", True) and not _wav_limpieza_segura_por_chunks(cobertura):
         lineas.append("> Limpieza de evidencia diferida por cobertura dudosa.")
     return "\n".join(lineas).strip() + "\n"
 
@@ -1656,12 +1758,22 @@ def _cobertura_estudiante_md(cobertura: dict) -> str:
             "gap" in str(item).casefold() or "continuidad" in str(item).casefold()
             for item in warnings):
         lines.append("- Se detectó al menos una transición o discontinuidad temporal de audio.")
+    if continuity.get("terminal_capture_failures"):
+        lines.append(
+            f"- La captura registró {int(continuity['terminal_capture_failures'])} "
+            "interrupciones; su contenido ausente requiere contrastar la grabación original.")
+    if float(continuity.get("wall_gap_max_seconds", 0) or 0) > 0.2:
+        lines.append(
+            "- El mayor intervalo sin audio registrado entre bloques fue de "
+            f"{float(continuity['wall_gap_max_seconds']):.1f} segundos.")
     if cobertura.get("wav_sin_transcript_total"):
         lines.append("- Existe audio conservado que todavía no tiene texto autoritativo.")
     if cobertura.get("periodos_con_capturas_sin_audio"):
         lines.append("- Algunas capturas no tienen explicación oral cercana verificable.")
     if len(lines) == 4:
-        lines.append("- La cobertura fue marcada para revisión; consulta el transcript y el deck.")
+        lines.append(
+            "- La cobertura fue marcada para revisión; contrasta los pasajes dudosos "
+            "con las imágenes incluidas y, si lo tienes, con el material oficial.")
     return "\n".join(lines).strip() + "\n"
 
 
@@ -3248,6 +3360,7 @@ def _fallback_merge_estudio(guiones: list[str]) -> str:
     """Publica los guiones locales sin envolverlos en metadatos del pipeline."""
     cuerpos: list[str] = []
     for guion in guiones:
+        guion, codigo = _proteger_codigo_markdown(str(guion or ""))
         lineas = []
         for linea in str(guion or "").splitlines():
             if re.match(r"^# Chunk\s+", linea):
@@ -3255,7 +3368,7 @@ def _fallback_merge_estudio(guiones: list[str]) -> str:
             if re.match(r"^> (?:Rango|Slides de esta tanda):", linea):
                 continue
             lineas.append(linea)
-        cuerpo = "\n".join(lineas).strip()
+        cuerpo = _restaurar_codigo_markdown("\n".join(lineas).strip(), codigo)
         if cuerpo:
             cuerpos.append(cuerpo)
     if not cuerpos:
@@ -3263,9 +3376,74 @@ def _fallback_merge_estudio(guiones: list[str]) -> str:
     return "## Desarrollo de la clase\n\n" + "\n\n".join(cuerpos)
 
 
+def _rangos_codigo_markdown(markdown: str) -> list[tuple[int, int]]:
+    """Localiza fences completos o abiertos sin interpretar su contenido."""
+    rangos: list[tuple[int, int]] = []
+    inicio = None
+    marca = ""
+    ancho = 0
+    posicion = 0
+    for linea in markdown.splitlines(keepends=True):
+        if inicio is None:
+            apertura = re.match(r"^ {0,3}(`{3,}|~{3,})([^\r\n]*)", linea)
+            if apertura and not (
+                    apertura.group(1).startswith("`") and "`" in apertura.group(2)):
+                inicio = posicion
+                marca = apertura.group(1)[0]
+                ancho = len(apertura.group(1))
+        elif re.fullmatch(r" {0,3}" + re.escape(marca) + "{" + str(ancho)
+                          + r",}[ \t]*(?:\r?\n)?", linea):
+            rangos.append((inicio, posicion + len(linea)))
+            inicio = None
+        posicion += len(linea)
+    if inicio is not None:
+        rangos.append((inicio, len(markdown)))
+    return rangos
+
+
+def _proteger_codigo_markdown(markdown: str) -> tuple[str, dict[str, str]]:
+    """Oculta código a transformaciones editoriales y conserva cada byte."""
+    reemplazos: dict[str, str] = {}
+    salida: list[str] = []
+    anterior = 0
+    for inicio, fin in _rangos_codigo_markdown(markdown):
+        bloque = markdown[inicio:fin]
+        token = "CLASEVIVACODE" + hashlib.sha256(bloque.encode()).hexdigest()
+        while token in markdown:
+            token += "X"
+        reemplazos[token] = bloque
+        salida.extend([markdown[anterior:inicio], token, "\n" if bloque.endswith("\n") else ""])
+        anterior = fin
+    salida.append(markdown[anterior:])
+    return "".join(salida), reemplazos
+
+
+def _restaurar_codigo_markdown(markdown: str, reemplazos: dict[str, str]) -> str:
+    for token, bloque in reemplazos.items():
+        # El salto después del token solo separa la prosa durante la edición.
+        if bloque.endswith("\n") and token + "\n" in markdown:
+            markdown = markdown.replace(token + "\n", bloque)
+        else:
+            markdown = markdown.replace(token, bloque)
+    return markdown
+
+
+def _markdown_sin_codigo(markdown: str) -> str:
+    """Máscara de igual longitud para buscar títulos con offsets originales."""
+    salida: list[str] = []
+    anterior = 0
+    for inicio, fin in _rangos_codigo_markdown(markdown):
+        salida.extend([markdown[anterior:inicio],
+                       re.sub(r"[^\r\n]", " ", markdown[inicio:fin])])
+        anterior = fin
+    salida.append(markdown[anterior:])
+    return "".join(salida)
+
+
 def _sanear_panorama_parte(markdown: str) -> str:
     """Una parte aporta cuerpo tematico; la portada y el resumen son globales."""
     txt = str(markdown or "").lstrip("\ufeff").strip()
+    txt, codigo = _proteger_codigo_markdown(txt)
     txt = re.sub(r"(?m)^#[ \t]+[^\n]*\n?", "", txt)
     txt = re.sub(
         r"(?mi)^>[ \t]*(?:Fecha|Idioma|Generado por)[^\n]*\n?", "", txt,
@@ -3279,7 +3457,7 @@ def _sanear_panorama_parte(markdown: str) -> str:
         limite = heading.end() + (fin.end() if fin else len(resto))
         txt = txt[:heading.start()] + txt[limite:]
     txt = re.sub(r"(?m)^\s*---\s*$", "", txt)
-    return re.sub(r"\n{3,}", "\n\n", txt).strip()
+    return _restaurar_codigo_markdown(re.sub(r"\n{3,}", "\n\n", txt).strip(), codigo)
 
 
 _EMAIL_PUBLICO_RE = re.compile(
@@ -3334,7 +3512,8 @@ def _normalizar_marcadores_imagen_llm(texto: str) -> str:
 
 def _sanear_contenido_llm_publico(texto: str) -> str:
     """Quita transcript duplicado, metadatos de prompt y PII antes de publicar."""
-    limpio = _normalizar_marcadores_imagen_llm(texto)
+    limpio, codigo = _proteger_codigo_markdown(str(texto or ""))
+    limpio = _normalizar_marcadores_imagen_llm(limpio)
     limpio = _redactar_datos_personales_publicos(limpio)
     limpio = _BLOQUE_TRANSCRIPT_LLM_RE.sub("", limpio)
     limpio = re.sub(
@@ -3397,21 +3576,14 @@ def _sanear_contenido_llm_publico(texto: str) -> str:
         "",
         limpio,
     )
-    # En imágenes uint8, torchvision.transforms.ToTensor convierte [0,255]
-    # a [0,1]. Corrige únicamente un comentario de código autocontradictorio.
-    limpio = re.sub(
-        r"(?m)(transforms\.ToTensor\(\)[^\n#]*#[^\n]*"
-        r"\[0\s*,\s*)0(\])",
-        r"\g<1>1\2",
-        limpio,
-    )
     limpio = re.sub(r"[ \t]+\n", "\n", limpio)
-    return re.sub(r"\n{3,}", "\n\n", limpio).strip()
+    return _restaurar_codigo_markdown(re.sub(r"\n{3,}", "\n\n", limpio).strip(), codigo)
 
 
 def _guion_sin_metadatos(guion: str) -> tuple[str, str, str]:
     """Devuelve clave, rango y cuerpo publicable de un guion de chunk."""
-    lineas = str(guion or "").splitlines()
+    protegido, codigo = _proteger_codigo_markdown(str(guion or ""))
+    lineas = protegido.splitlines()
     cabecera = next((linea for linea in lineas if re.match(r"^# Chunk\s+", linea)), "")
     match = re.match(r"^# Chunk\s+(\d+\.\d{3})(?:_\d+)?", cabecera)
     clave = match.group(1) if match else f"sin-clave-{hashlib.sha256(str(guion).encode()).hexdigest()[:8]}"
@@ -3426,7 +3598,8 @@ def _guion_sin_metadatos(guion: str) -> tuple[str, str, str]:
         if re.match(r"^> Slides de esta tanda:", linea):
             continue
         cuerpo.append(linea)
-    return clave, rango.strip(), _sanear_contenido_llm_publico("\n".join(cuerpo))
+    return clave, rango.strip(), _restaurar_codigo_markdown(
+        _sanear_contenido_llm_publico("\n".join(cuerpo)), codigo)
 
 
 def _guiones_textuales_para_merge(guiones: list[str]) -> str:
@@ -3461,7 +3634,8 @@ def _subir_nivel_encabezados(markdown: str, niveles: int = 2) -> str:
     def repl(match):
         nivel = min(6, len(match.group(1)) + niveles)
         return "#" * nivel + " " + match.group(2)
-    return re.sub(r"(?m)^(#{1,5})\s+(.+)$", repl, str(markdown or ""))
+    texto, codigo = _proteger_codigo_markdown(str(markdown or ""))
+    return _restaurar_codigo_markdown(re.sub(r"(?m)^(#{1,5})\s+(.+)$", repl, texto), codigo)
 
 
 def _desarrollo_detallado_guiones_md(
@@ -3615,7 +3789,8 @@ def _adornar_encabezados_pedagogicos(markdown: str) -> str:
             if any(palabra in normal for palabra in palabras):
                 return f"{hashes} {icono} {titulo}"
         return match.group(0)
-    return re.sub(r"(?m)^(#{2,4})\s+(.+)$", repl, str(markdown or ""))
+    texto, codigo = _proteger_codigo_markdown(str(markdown or ""))
+    return _restaurar_codigo_markdown(re.sub(r"(?m)^(#{2,4})\s+(.+)$", repl, texto), codigo)
 
 
 def _bloques_img_omitidas(merge_input: str, faltantes: set[str]) -> list[dict]:
@@ -3738,7 +3913,7 @@ def _sanear_metadatos_visuales_publicos(markdown: str) -> str:
     # párrafos no aporta al estudio.
     texto = re.sub(
         r"(?<!img/)(?<!IMG:)\b(?:cap|region)_\d+"
-        r"(?:_[\w-]+)*\.(?:jpe?g|png)\b",
+        r"(?:_[\w-]+)*\.(?:jpe?g|png|webp)\b",
         "", texto, flags=re.I,
     )
     texto = re.sub(
@@ -3778,7 +3953,7 @@ def _limpiar_texto_visual_publico(texto: str, max_chars: int = 520) -> str:
     )
     texto = re.sub(
         r"(?<!img/)(?<!IMG:)\b(?:cap|region)_\d+"
-        r"(?:_[\w-]+)*\.(?:jpe?g|png)\b",
+        r"(?:_[\w-]+)*\.(?:jpe?g|png|webp)\b",
         " ", texto, flags=re.I,
     )
     # Conserva guiones bajos: pueden ser identificadores reales como learning_rate.
@@ -3818,6 +3993,29 @@ def _ocr_con_casing_corrupto(texto: str) -> bool:
         and any(char.isupper() for char in token[1:])
         for token in tokens
     )
+
+
+def _rotulo_visual_limpio(texto: str, max_chars: int = 150) -> str:
+    """Rescata una línea completa, nunca un título hecho con OCR periférico cortado.
+
+    No corrige palabras por intuición. Si no hay un rótulo legible, la imagen sigue
+    siendo evidencia pero su cadena OCR no se presenta como texto validado.
+    """
+    for linea in str(texto or "").splitlines():
+        limpio = _limpiar_texto_visual_publico(linea, max_chars=max(len(linea), 1))
+        if (
+            not limpio or len(limpio) > max_chars
+            or re.search(r"\b0{3,}\b|[A-Za-zÀ-ÿ][•�][A-Za-zÀ-ÿ]", limpio)
+            or re.search(r"\b[a-zà-ÿ][A-ZÀ-Þ]{2,}\b", limpio)
+            or _ocr_con_casing_corrupto(limpio)
+            or _ocr_dominado_por_interfaz(limpio)
+            or _texto_ruido_visual(limpio)
+            or _contiene_datos_personales_visuales(limpio)
+            or not _texto_visual_publicable(limpio, min_tokens=2)
+        ):
+            continue
+        return limpio
+    return ""
 
 
 _CROMO_APLICACION_VISUAL = (
@@ -4127,9 +4325,10 @@ def _caption_entorno_practico(slide: dict) -> str:
         or str(slide.get("visual_tipo", "") or "") != "codigo_formula_tabla"
     ):
         return ""
+    # La ventana oral puede pertenecer a la lámina anterior. Una afirmación sobre
+    # lo que se ve requiere anclas en la propia captura, no solo cercanía temporal.
     normal = _normalizar_busqueda(
-        f"{slide.get('ocr_principal', '')} {slide.get('ocr', '')} "
-        f"{slide.get('transcript_ventana', '')}")
+        str(slide.get('ocr_principal') or slide.get('ocr') or ""))
     technical_normal = re.sub(r"\s*_\s*", "_", normal)
     if (
         any(term in technical_normal for term in (
@@ -4160,13 +4359,7 @@ def _caption_entorno_practico(slide: dict) -> str:
             "opciones de descarga o partición y los objetos que después alimentarán el "
             "entrenamiento y la validación."
         )
-    if (
-        any(term in normal for term in (
-            "pil.image", "pil image", "imagen", "image", "matriz", "matrix"))
-        and any(term in normal for term in (
-            "etiqueta", "label", "x y", "x, y", "28 por 28", "28 x 28",
-            "28x28", "par"))
-    ):
+    if _evidencia_datos_ml(normal) == "imagen_etiquetada":
         return (
             "La captura inspecciona una muestra como par de entrada y etiqueta: la "
             "imagen se representa mediante una matriz de píxeles y la etiqueta conserva "
@@ -4342,13 +4535,15 @@ def _caption_visual_determinista(slide: dict, max_chars: int = 420) -> str:
         return ""
     # El STT cercano aporta contexto temporal, pero no demuestra que describa
     # lo visible. Solo respalda un titulo breve que tambien se lee en la imagen.
-    ocr_breve = _limpiar_texto_visual_publico(ocr, 180)
+    ocr_breve = _rotulo_visual_limpio(ocr, 180)
     tokens_ocr = _tokens_relevantes(ocr_breve)
     tokens_transcript = _tokens_relevantes(
         str(slide.get("transcript_ventana", "") or ""))
     role = str(slide.get("visual_role", "") or "")
-    corroborada = len(tokens_ocr & tokens_transcript) >= min(
-        2, len(tokens_ocr))
+    coincidencias = len(tokens_ocr & tokens_transcript)
+    corroborada = bool(
+        tokens_ocr and coincidencias >= min(2, len(tokens_ocr))
+        and coincidencias / len(tokens_ocr) >= 0.5)
     ancla_principal = bool(
         role in {"principal", "secuencia"}
         and float(slide.get("visual_score", 0) or 0) >= 6
@@ -4366,10 +4561,41 @@ def _caption_visual_determinista(slide: dict, max_chars: int = 420) -> str:
         }
     )
     if ancla_breve:
-        return (
-            f"La captura presenta «{ocr_breve}». Este título o rótulo visible fue "
-            "corroborado por la explicación del mismo tramo."
+        apoyo = (
+            "El rótulo coincide con términos de la explicación del mismo tramo."
+            if corroborada else
+            "El rótulo orienta la lectura de la imagen; por sí solo no demuestra "
+            "que toda su información haya sido explicada oralmente."
         )
+        return f"La captura presenta «{ocr_breve}». {apoyo}"
+    return ""
+
+
+def _evidencia_datos_ml(texto: str) -> str:
+    """Exige señales complementarias de ML; 'tabla', 'muestra' o 'par' no bastan."""
+    normal = re.sub(r"\s*_\s*", "_", _normalizar_busqueda(texto))
+
+    def tiene(patron: str) -> bool:
+        return bool(re.search(rf"(?<!\w)(?:{patron})(?!\w)", normal))
+
+    imagen = tiene(
+        r"imagenes?|images?|matri[cz](?:es)?|matrix|pixels?|pixeles|"
+        r"pil[. ]image|mnist|\d+\s*(?:x|×|por)\s*\d+\s*pixeles")
+    etiqueta = tiene(r"etiquetas?|labels?|clase correcta|target|targets|x\s*[,/]\s*y")
+    if imagen and etiqueta:
+        return "imagen_etiquetada"
+    particion = tiene(
+        r"(?:x|y)_(?:train|valid|test)|(?:train(?:ing)?|test|valid(?:ation)?) set|"
+        r"(?:conjunto|datos|dataset|particion)(?: de)? (?:entrenamiento|validacion|prueba)")
+    if particion:
+        return "particiones"
+    coleccion = tiene(r"datasets?|conjunto de datos|samples?|muestras?|observaciones")
+    estructura = tiene(r"features?|caracteristicas|variables|etiquetas?|labels?|targets?")
+    aprendizaje = tiene(
+        r"entrenamiento|entrenar|supervisad[oa]|training|aprendizaje automatico|"
+        r"machine learning|modelo predictivo|red(?:es)? neuronal(?:es)?")
+    if coleccion and estructura and aprendizaje:
+        return "aprendizaje"
     return ""
 
 
@@ -4378,17 +4604,23 @@ def _tipo_lectura_visual(slide: dict, texto: str) -> str:
         return "web"
     if slide.get("media_reference"):
         return "media"
-    normal = _normalizar_busqueda(
-        f"{texto} {slide.get('ocr_principal', '')} {slide.get('ocr', '')}")
+    # Priorizar el tema propio de la imagen. La prosa próxima o una plantilla
+    # anterior no debe convertir cualquier tabla o la palabra 'muestra' en ML.
+    fuente = str(slide.get('ocr_principal') or slide.get('ocr') or texto or "")
+    normal = _normalizar_busqueda(fuente)
     visual_tipo = str(slide.get("visual_tipo", "") or "")
     if re.search(
-            r"\b(import|def|class|return|torch|torchvision|numpy|pandas|"
-            r"model|optimizer|backward)\b", normal):
+            r"\b(?:import\s+\w+|from\s+\w+\s+import|def\s+\w+\s*\(|"
+            r"class\s+\w+\s*[:(]|(?:torch|torchvision|numpy|pandas|model|"
+            r"optimizer)\s*\.\s*\w+|backward\s*\()", normal):
         return "codigo"
-    if any(term in normal for term in (
-            "dataset", "conjunto de datos", "muestra", "sample", "train", "test",
-            "feature", "label", "etiqueta", "tabla", "matrix", "matriz")):
+    if _evidencia_datos_ml(normal):
         return "datos"
+    if re.search(r"\b(?:veracidad|fiabilidad|data quality|calidad de (?:los )?datos)\b", normal):
+        return "calidad_datos"
+    if re.search(r"\b(?:[kmgptzey]ettabytes?|[kmgptzey]igabytes?|terabytes?|"
+                 r"petabytes?|exabytes?|volumen de datos|unidades de almacenamiento)\b", normal):
+        return "escala_datos"
     if _contiene_codigo_formula(normal):
         return "formula"
     if any(term in normal for term in (
@@ -4407,126 +4639,22 @@ def _tipo_lectura_visual(slide: dict, texto: str) -> str:
             "entrada", "input", "salida", "output", "proceso", "workflow",
             "pipeline", "ciclo", "feedback")):
         return "proceso"
+    # Una mención genérica de datos no debe ocultar una fórmula, agenda o
+    # comparación que sí tiene señal estructural en la propia diapositiva.
+    if re.search(r"\b(?:tablas?|muestras?|samples?|datasets?|conjunto de datos|"
+                 r"matriz|matrix|observaciones|variables)\b", normal):
+        return "datos_generales"
     if visual_tipo == "diagrama_o_grafico_probable":
         return "diagrama"
     return "lamina"
 
 
 def _guia_lectura_visual(slide: dict, texto: str) -> tuple[str, str, str]:
-    """Devuelve observación, interpretación y una acción concreta de estudio."""
-    tipo = _tipo_lectura_visual(slide, texto)
-    normal = _normalizar_busqueda(
-        f"{texto} {slide.get('media_title', '')} "
-        f"{slide.get('ocr_principal', '')} {slide.get('ocr', '')} "
-        f"{slide.get('transcript_ventana', '')}"
-    )
-    if tipo == "media" and any(term in normal for term in (
-            "lenet", "mnist", "handwritten", "digito manuscrito",
-            "digitos manuscritos", "convolutional network")):
-        return (
-            "Localiza el dígito manuscrito usado como entrada, la clase o predicción "
-            "mostrada por el sistema y los cambios de trazo, posición o grosor entre "
-            "ejemplos. En la ficha del recurso, identifica además LeNet y el contexto "
-            "histórico de la demostración.",
-            "La secuencia muestra inferencia, no el proceso de entrenamiento: una red "
-            "convolucional ya ajustada transforma los píxeles en características y luego "
-            "elige una clase. Que reconozca escrituras distintas ilustra por qué aprender "
-            "patrones de datos resulta más útil que programar reglas manuales para cada trazo.",
-            "Reconstruye el recorrido entrada de 28 × 28 píxeles → extracción de "
-            "características → puntuaciones por clase → dígito predicho, y distingue esa "
-            "predicción de la etiqueta real usada durante el entrenamiento.",
-        )
-    guias = {
-        "web": (
-            "Distingue la consulta escrita, la fuente o resultado que se abrió y el "
-            "fragmento que motivó la navegación; ignora anuncios y paneles laterales.",
-            "La búsqueda documenta cómo el profesor contextualizó o contrastó una idea. "
-            "Debe leerse junto con el desarrollo de la clase y las fuentes citadas.",
-            "Explica qué duda intentaba resolver la consulta y qué parte de la lección "
-            "quedó apoyada por el recurso abierto.",
-        ),
-        "media": (
-            "Observa el material presentado, el estado visible de la demostración y la "
-            "relación entre la entrada, el proceso mostrado y el resultado en pantalla.",
-            "Una demostración aporta evidencia de comportamiento: no basta con reconocer "
-            "el reproductor; hay que identificar qué cambió y qué afirmación ilustra.",
-            "Describe el experimento en cuatro pasos: montaje, entrada, transformación y "
-            "resultado observable; después enlázalo con el concepto explicado.",
-        ),
-        "codigo": (
-            "Sigue el flujo del bloque: datos de entrada, operación ejecutada, formas o "
-            "parámetros relevantes y salida que se inspecciona.",
-            "El código traduce la explicación a operaciones verificables. Cada línea debe "
-            "poder relacionarse con una decisión del procedimiento.",
-            "Reconstruye qué recibe cada instrucción, qué transforma y qué resultado "
-            "esperarías antes de ejecutarla.",
-        ),
-        "formula": (
-            "Localiza símbolos, operadores, índices y valores; identifica qué magnitud "
-            "depende de cuál y qué unidades o restricciones aparecen.",
-            "La fórmula condensa una relación que el texto desarrolla. Leerla implica "
-            "nombrar cada término y explicar el sentido de la operación.",
-            "Define cada símbolo y razona qué cambiaría en el resultado al aumentar o "
-            "disminuir uno de los parámetros.",
-        ),
-        "datos": (
-            "Diferencia muestra, características, etiqueta, dimensiones y particiones; "
-            "busca también variabilidad, balance o ejemplos atípicos.",
-            "La visualización permite pasar de una colección abstracta a la estructura "
-            "que realmente consume el modelo o procedimiento.",
-            "Comprueba cuántas observaciones, variables y clases hay, y explica para qué "
-            "se usa cada partición del conjunto de datos.",
-        ),
-        "historia": (
-            "Ordena fechas, personas, hitos y limitaciones; no leas la cronología como "
-            "una lista aislada de nombres.",
-            "El valor pedagógico está en la cadena causal: qué problema existía, qué "
-            "avance lo resolvió y qué consecuencia produjo.",
-            "Resume la secuencia como causa → avance → consecuencia y ubica cada hito en "
-            "esa relación.",
-        ),
-        "comparacion": (
-            "Identifica los criterios compartidos y compara fila por fila o columna por "
-            "columna, evitando fijarte solo en una diferencia llamativa.",
-            "La comparación sirve para justificar una elección o revelar un límite; el "
-            "criterio de comparación es tan importante como el resultado.",
-            "Formula una conclusión por criterio y señala en qué escenario conviene cada "
-            "alternativa.",
-        ),
-        "agenda": (
-            "Lee la jerarquía de temas y el orden propuesto; distingue objetivos, bloques "
-            "de contenido, práctica y evaluación.",
-            "La agenda funciona como mapa de dependencias: los bloques iniciales preparan "
-            "los conceptos que se aplicarán después.",
-            "Explica qué conocimiento previo necesita cada bloque y qué capacidad debería "
-            "quedar al finalizarlo.",
-        ),
-        "proceso": (
-            "Recorre flechas y etapas desde la entrada hasta la salida; ubica bucles, "
-            "decisiones, retroalimentación y criterios de parada.",
-            "El diagrama representa una secuencia operativa. Su lectura correcta exige "
-            "explicar qué produce cada etapa para la siguiente.",
-            "Narra el proceso sin mirar la imagen y verifica que puedas justificar cada "
-            "transición.",
-        ),
-        "diagrama": (
-            "Identifica componentes, agrupaciones, direcciones y relaciones espaciales; "
-            "observa qué elementos reciben mayor énfasis visual.",
-            "La disposición convierte relaciones abstractas en una estructura. El texto "
-            "de la lección aporta el significado que no se deduce solo de la geometría.",
-            "Explica la función de cada componente y cómo cambiaría el sistema si uno se "
-            "eliminara o modificara.",
-        ),
-        "lamina": (
-            "Empieza por el título, sigue la jerarquía de ideas y relaciona cada ejemplo "
-            "o cifra con la afirmación principal.",
-            "La lámina organiza evidencia, pero la explicación cercana establece las "
-            "relaciones causales y los matices necesarios para comprenderla.",
-            "Reformula la idea central con tus palabras y usa los elementos visibles como "
-            "pruebas o ejemplos de esa formulación.",
-        ),
-    }
-    return guias[tipo]
+    """Añade únicamente detalles visibles específicos que no repite la leyenda."""
+    visible = _ocr_visual_confiable(slide, max_chars=440)
+    if not visible or _normalizar_busqueda(visible) in _normalizar_busqueda(texto):
+        return "", "", ""
+    return visible, "", ""
 
 
 def _caption_visual_generico(texto: str) -> bool:
@@ -4620,8 +4748,9 @@ def _visual_card_md(slide: dict, *, archivo: str, caption: str = "",
         titulo_norm = _normalizar_busqueda(titulo)
         if titulo_norm in idea_norm or idea_norm in titulo_norm:
             idea = ""
-    observacion, interpretacion, repaso = _guia_lectura_visual(
-        slide, f"{titulo} {visible} {idea}")
+    observacion, interpretacion, repaso = (
+        ("", "", "") if caption_confiable and lectura else
+        _guia_lectura_visual(slide, f"{titulo} {idea}"))
     observacion = guia_estructurada.get("observacion", observacion)
     interpretacion = guia_estructurada.get("interpretacion", interpretacion)
     repaso = guia_estructurada.get("repaso", repaso)
@@ -4635,8 +4764,8 @@ def _visual_card_md(slide: dict, *, archivo: str, caption: str = "",
         momento = fmt_t(float(slide.get("t_rel") or 0), {"origen": "video"})
     material = slide.get("material_oficial") or {}
     procedencia = (
-        f"Material oficial, página {material.get('pagina', '?')}; captura de aparición "
-        f"conservada en {visual_materials.MANIFEST_NAME}."
+        f"Material oficial, página {material.get('pagina', '?')}; emparejado con una "
+        "captura de esta grabación."
         if material else "Captura original conservada como evidencia."
     )
     meta = " · ".join(filter(None, [
@@ -4648,14 +4777,17 @@ def _visual_card_md(slide: dict, *, archivo: str, caption: str = "",
         f"<br><br>**🔗 Conexión con la explicación:** {idea}"
         if idea else ""
     )
-    celda = (
-        f"**🧭 Lectura guiada — idea central:** {titulo}"
-        f"<br><br>**👁️ Qué observar:** {observacion}"
-        f"{conexion}"
-        f"<br><br>**🧠 Cómo interpretarla:** {interpretacion}"
-        f"<br><br>**🎯 Para estudiar:** {repaso}<br><br>"
-        f"<small>{meta}</small>"
-    )
+    detalles = [f"**🧭 Lectura guiada — idea central:** {titulo}"]
+    if observacion:
+        detalles.append(f"**👁️ Qué observar:** {observacion}")
+    if conexion:
+        detalles.append(conexion.removeprefix("<br><br>"))
+    if interpretacion:
+        detalles.append(f"**🧠 Cómo interpretarla:** {interpretacion}")
+    if repaso:
+        detalles.append(f"**🎯 Para estudiar:** {repaso}")
+    detalles.append(f"<small>{meta}</small>")
+    celda = "<br><br>".join(detalles)
     celda = celda.replace("|", "/").replace("<script", "&lt;script")
     return (
         "| 🖼️ Evidencia visual | 📖 Explicación para estudiar |\n"
@@ -4950,7 +5082,7 @@ def _galeria_visual_complementaria_md(
             )
         )
         # No es un techo: cada visual que supera el contrato semántico se publica.
-        # El resto sigue trazable en img_log/timeline y conserva su archivo original.
+        # El resto queda en la evidencia de trabajo hasta la compactación autorizada.
         if (referencia_observada or material or razones or narrativa_alineada
                 or estado_visual_distinto
                 or (corroborada and transcript and estable and visual_score >= 6)):
@@ -5006,9 +5138,9 @@ def _galeria_visual_complementaria_md(
         lineas.extend([
             "## 🖼️ Galería visual complementaria",
             "",
-            "> Evidencia visual relevante que complementa la explicación. Los duplicados "
-            "y frames sin valor permanecen trazables en el timeline, pero no se publican "
-            "aquí.",
+            "> Imágenes relevantes que complementan la explicación. Se incluyen solo "
+            "las seleccionadas para estudiar; los duplicados y frames sin valor "
+            "pedagógico no forman parte de esta galería.",
             "",
             "<details>",
             f"<summary>🖼️ Abrir galería complementaria "
@@ -5030,9 +5162,9 @@ def _galeria_visual_complementaria_md(
         ])
     if solo_evidencia:
         lineas.extend([
-            f"> {solo_evidencia} frame(s) adicional(es) se conservaron como evidencia "
-            "trazable, pero no se publicaron porque carecían de explicación cercana o "
-            "valor pedagógico verificable.", "",
+            "> Durante la selección se revisaron otras capturas que no se incluyeron "
+            "por carecer de explicación cercana o valor pedagógico verificable. "
+            "El paquete de estudio conserva las imágenes referenciadas en la lección.", "",
         ])
     if complementarias:
         lineas.extend(["</details>", ""])
@@ -5349,6 +5481,7 @@ def _captions_compatibles(a: str, b: str) -> bool:
 
 def deduplicar_referencias_img(md: str) -> tuple[str, dict]:
     """Conserva una sola asociación principal por imagen y reporta conflictos."""
+    md, codigo = _proteger_codigo_markdown(str(md or ""))
     vistas: dict[str, str] = {}
     lineas_out: list[str] = []
     reporte = {
@@ -5380,7 +5513,7 @@ def deduplicar_referencias_img(md: str) -> tuple[str, dict]:
                 vistas[ref] = caption
             lineas_out.append(linea)
 
-    return "\n".join(lineas_out), reporte
+    return _restaurar_codigo_markdown("\n".join(lineas_out), codigo), reporte
 
 
 def _sumar_reporte_duplicados(destino: dict, reporte: dict) -> None:
@@ -5420,6 +5553,7 @@ def entretejer(cuerpo: str, d: Path, unicas: list[dict], origen: str) -> str:
     limpieza posterior."""
     por_nombre = {c["archivo"]: c for c in unicas}
     usadas: set[str] = set()
+    cuerpo, codigo = _proteger_codigo_markdown(cuerpo)
     cuerpo = _quitar_imagenes_crudas(cuerpo)
 
     def reemplazo(m):
@@ -5437,7 +5571,7 @@ def entretejer(cuerpo: str, d: Path, unicas: list[dict], origen: str) -> str:
             permitir_detalle_ocr=False) + "\n"
 
     tejido = eliminar_otras_pantallas(RE_MARCADOR.sub(reemplazo, cuerpo))
-    return _filtrar_imgs_autorizadas(tejido, usadas)
+    return _restaurar_codigo_markdown(_filtrar_imgs_autorizadas(tejido, usadas), codigo)
 
 
 def _solo_marcadores_suplementarios(cuerpo: str,
@@ -6220,8 +6354,7 @@ def _extraer_busquedas(md: str) -> tuple[str, list[str]]:
 
 def _reporte_cobertura_textual(final_txt: str, segs: list[dict]) -> dict:
     trans = _texto_segs(segs)
-    visible = re.sub(r"<[^>]+>", " ", final_txt)
-    visible = re.sub(r"\s+", " ", visible).strip()
+    visible = _texto_desarrollo_para_cobertura(final_txt)
     ratio = len(visible) / max(1, len(trans))
     return {
         "transcript_chars": len(trans),
@@ -6232,7 +6365,7 @@ def _reporte_cobertura_textual(final_txt: str, segs: list[dict]) -> dict:
 
 
 MULETILLAS_RE = re.compile(
-    r"\b(?:um+|uh+|eh+|este+|okay|ok|right|you know|i mean)\b[,\s]*", re.I)
+    r"^(?:(?:um+|uh+|eh+|okay|ok|you know|i mean)\b[,\s]+)+", re.I)
 IMPORTANTE_RE = re.compile(
     r"(\b\d{4}\b|[=∑ΣΔ∂→<-]|[A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)*)")
 
@@ -6267,13 +6400,11 @@ def optimizar_transcript_llm(segs: list[dict], origen) -> dict:
         texto = _texto_segmento_limpio(str(s.get("texto", "")))
         if not texto:
             continue
-        normal = _normalizar_busqueda(texto)
+        # La similitud difusa confunde cambios de cifras, signos y negaciones
+        # con repeticiones. Tampoco normalizar acentos/caja: sí/si y A/a pueden
+        # distinguir afirmaciones o variables diferentes.
+        normal = texto
         duplicado = normal in recientes
-        if not duplicado:
-            for prev in recientes[-8:]:
-                if difflib.SequenceMatcher(None, normal, prev).ratio() >= 0.94:
-                    duplicado = True
-                    break
         if duplicado:
             dedup += 1
             continue
@@ -6480,6 +6611,8 @@ def preguntar_cacheado(d: Path, msgs: list[dict], max_tokens: int,
                        etiqueta: str, prompt_version: str) -> str | None:
     """Cache local opcional para reprocesar la misma tanda sin nueva llamada."""
     if not _post_llm_enabled():
+        if _EXIGIR_APIS.get():
+            raise ConsolidationApiError("DeepSeek está desactivado para la consolidación. Activa CLASE_POST_LLM y vuelve a intentar.")
         stats = getattr(preguntar_cacheado, "stats", None)
         if stats is None:
             _cache_stats_reset()
@@ -6494,9 +6627,12 @@ def preguntar_cacheado(d: Path, msgs: list[dict], max_tokens: int,
     if cache_config in {"0", "false", "no", "off"}:
         preguntar_cacheado.ultimo_reporte = {"cache": "off", "hit": False}
         _cache_stats_note(hit=False, cache_on=False)
-        return preguntar(
-            msgs, max_tokens=max_tokens, etiqueta=etiqueta, thinking=False)
-    contenido = "\n\n".join(str(m.get("content", "")) for m in msgs)
+        return _validar_respuesta_api(preguntar(
+            msgs, max_tokens=max_tokens, etiqueta=etiqueta, thinking=False), etiqueta)
+    contenido = json.dumps(
+        {"messages": msgs, "max_tokens": max_tokens, "thinking": False,
+         "temperature": 0.3, "endpoint": config.DEEPSEEK_BASE_URL},
+        ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     # El perfil forma parte del contrato de salida. No reutilizar respuestas
     # cacheadas cuando el proveedor razonaba dentro del mismo max_tokens y podía
     # devolver el contenido visible vacío o truncado.
@@ -6507,11 +6643,13 @@ def preguntar_cacheado(d: Path, msgs: list[dict], max_tokens: int,
     if path.is_file():
         preguntar_cacheado.ultimo_reporte = {"cache": "on", "hit": True, "key": key}
         _cache_stats_note(hit=True, cache_on=True)
-        return path.read_text(encoding="utf-8")
-    r = preguntar(
-        msgs, max_tokens=max_tokens, etiqueta=etiqueta, thinking=False)
+        cached = path.read_text(encoding="utf-8")
+        if cached.strip():
+            return cached
+    r = _validar_respuesta_api(preguntar(
+        msgs, max_tokens=max_tokens, etiqueta=etiqueta, thinking=False), etiqueta)
     if not _respuesta_vacia(r):
-        path.write_text(str(r), encoding="utf-8")
+        study_package.write_text_atomic(path, str(r))
     preguntar_cacheado.ultimo_reporte = {"cache": "on", "hit": False, "key": key}
     _cache_stats_note(hit=False, cache_on=True)
     return r
@@ -6539,7 +6677,8 @@ def contexto_previo_compacto(d: Path, max_chars: int = 8000) -> dict:
         return {"disponible": False, "texto": "", "resumen": "",
                 "chars_originales": 0,
                 "chars_enviados": 0, "porcentaje_ahorro": 0.0}
-    txt = study_package.strip_metadata(final.read_text(encoding="utf-8"))
+    original = final.read_text(encoding="utf-8")
+    txt = study_package.strip_source_transcript(study_package.strip_metadata(original))
     resumen = _extraer_resumen_ejecutivo(txt)
     headings = "\n".join(re.findall(r"^#{1,3}\s+.+$", txt, flags=re.M)[:60])
     cola = txt[-max(1200, max_chars // 3):]
@@ -6567,6 +6706,7 @@ def contexto_previo_compacto(d: Path, max_chars: int = 8000) -> dict:
         "texto": compacto,
         "resumen": resumen,
         "texto_completo": txt,
+        "texto_fuente_previo": original,
         "chars_originales": len(txt),
         "chars_enviados": len(compacto),
         "porcentaje_ahorro": round(ahorro, 2),
@@ -6844,7 +6984,8 @@ def _fusionar_contenidos_sin_perdida(contenidos: list[str]) -> str:
         limpio = _limpiar_bordes_seccion(contenido)
         if not limpio:
             continue
-        clave = re.sub(r"\s+", " ", limpio).strip().casefold()
+        # Mayúsculas, espacios y saltos pueden cambiar código y fórmulas.
+        clave = limpio
         if clave in vistos:
             continue
         vistos.add(clave)
@@ -6854,7 +6995,7 @@ def _fusionar_contenidos_sin_perdida(contenidos: list[str]) -> str:
 
 def _extraer_secciones_mayores(markdown: str) -> tuple[str, list[dict]]:
     txt = _limpiar_bordes_seccion(markdown)
-    coincidencias = list(_RE_SECCION_MAYOR.finditer(txt))
+    coincidencias = list(_RE_SECCION_MAYOR.finditer(_markdown_sin_codigo(txt)))
     if not coincidencias:
         return txt, []
     preambulo = _limpiar_bordes_seccion(txt[:coincidencias[0].start()])
@@ -6890,7 +7031,7 @@ def _fusionar_subsecciones_estudio(contenidos: list[str]) -> str:
     secciones: dict[str, dict] = {}
     for contenido in contenidos:
         txt = _limpiar_bordes_seccion(contenido)
-        coincidencias = list(_RE_SUBSECCION_ESTUDIO.finditer(txt))
+        coincidencias = list(_RE_SUBSECCION_ESTUDIO.finditer(_markdown_sin_codigo(txt)))
         if not coincidencias:
             if txt:
                 preambulos.append(txt)
@@ -6923,11 +7064,13 @@ def _fusionar_subsecciones_estudio(contenidos: list[str]) -> str:
                 numero += 1
                 return f"{match.group('indentacion')}{numero}. "
 
+            cuerpo, codigo = _proteger_codigo_markdown(cuerpo)
             cuerpo = re.sub(
                 r"(?m)^(?P<indentacion>[ \t]*)\d+\.[ \t]+",
                 renumerar_pregunta,
                 cuerpo,
             )
+            cuerpo = _restaurar_codigo_markdown(cuerpo, codigo)
         bloque = f"### {seccion['titulo']}"
         if cuerpo:
             bloque += f"\n\n{cuerpo}"
@@ -6948,7 +7091,8 @@ def _renumerar_tramos_integrados(markdown: str) -> str:
         contador += 1
         return f"{match.group('prefijo')} {contador}{match.group('sufijo')}"
 
-    return patron.sub(reemplazar, str(markdown or ""))
+    texto, codigo = _proteger_codigo_markdown(str(markdown or ""))
+    return _restaurar_codigo_markdown(patron.sub(reemplazar, texto), codigo)
 
 
 _TITULOS_SECCIONES_INTEGRADAS = {
@@ -6976,10 +7120,10 @@ def _integrar_partes_por_secciones(markdown: str) -> str:
     Las partes siguen trazables en manifests y evidencia, pero no dividen el material
     de estudio. También admite una lección ya unificada seguida de otra continuación.
     """
-    original = str(markdown or "").strip()
+    original, codigo = _proteger_codigo_markdown(str(markdown or "").strip())
     partes = list(_RE_PARTE_PUBLICADA.finditer(original))
     if not partes:
-        return original
+        return _restaurar_codigo_markdown(original, codigo)
 
     coberturas: list[tuple[int, str, str]] = []
     for patron in (_RE_COBERTURA_INTEGRADA, _RE_RANGO_PUBLICADO):
@@ -7072,7 +7216,7 @@ def _integrar_partes_por_secciones(markdown: str) -> str:
     )
     integrado = _renumerar_tramos_integrados(integrado)
     integrado = re.sub(r"\n{3,}", "\n\n", integrado).strip()
-    return deduplicar_referencias_img(integrado)[0].strip()
+    return _restaurar_codigo_markdown(deduplicar_referencias_img(integrado)[0].strip(), codigo)
 
 
 def _normalizar_rangos_publicados(
@@ -7173,7 +7317,9 @@ def _compactar_markdown_para_resumen(
     txt = re.sub(r"\n{3,}", "\n\n", txt).strip()
     if len(txt) <= max_chars:
         return txt
-    preambulo, *secciones = re.split(r"(?m)(?=^##[ \t]+\S)", txt)
+    # Los tramos están anidados bajo un único ## Desarrollo. Muestrear solo ##
+    # sesgaba toda la sección hacia sus primeros minutos, ocultando el cierre.
+    preambulo, *secciones = re.split(r"(?m)(?=^#{2,4}[ \t]+\S)", txt)
     if not secciones:
         return txt[:max_chars].rsplit(" ", 1)[0].rstrip()
     max_secciones = max(1, max_chars // 420)
@@ -7535,7 +7681,9 @@ def consolidar_parte(d: Path, parte: int, t_ini: float, t_fin: float,
                     f"{fuentes_contexto_txt}"
                     f"ANALISIS LOCAL DE PUBLICIDAD/RUIDO:\n"
                     f"{analisis_publicidad_md(info_pub)}\n\n"
+                    f"CONTEXTO ANTERIOR (enlace entre tramos):\n{antes}\n\n"
                     f"TRANSCRIPCION FILTRADA DEL RANGO:\n{texto}\n\n"
+                    f"CONTEXTO SIGUIENTE (continuidad, no nuevo rango):\n{despues}\n\n"
                     f"SLIDES ENVIADAS (tanda {lote_idx}/{len(lotes_slides)}):\n"
                     f"{fichas_txt}"
                 )
@@ -7557,6 +7705,11 @@ def consolidar_parte(d: Path, parte: int, t_ini: float, t_fin: float,
                     cuerpo, consultas = _extraer_busquedas(str(cuerpo))
                     consultas_segmento.extend(consultas)
                 cuerpo = _sanear_contenido_llm_publico(str(cuerpo))
+                cuerpo, llamadas_detalle = _ampliar_guion_breve(
+                    d, cuerpo, segs_chunk, prompt_usuario, etiqueta)
+                llamadas_reales += llamadas_detalle
+                cuerpo, consultas_detalle = _extraer_busquedas(cuerpo)
+                consultas_segmento.extend(consultas_detalle)
                 if (not consultas_segmento and _post_llm_enabled()
                         and clave_chunk not in consultas_por_chunk):
                     consulta_fallback = _consulta_web_fallback(
@@ -7578,8 +7731,14 @@ def consolidar_parte(d: Path, parte: int, t_ini: float, t_fin: float,
             if lote_principal and _leccion_demasiado_corta(tejido, segs_chunk) and \
                     "Transcripcion cruda" not in tejido and \
                     "Transcripción cruda" not in tejido:
-                tejido = tejido.rstrip() + "\n\n" + _transcripcion_cruda_md(
-                    segs_chunk, origen, "### Transcripcion cruda del tramo")
+                tejido = (
+                    tejido.rstrip()
+                    + "\n\n> **Desarrollo pendiente de revisión:** este tramo quedó "
+                    "demasiado abreviado según la comprobación de longitud. Revisa "
+                    "sus detalles en el registro de texto reconocido.\n\n"
+                    + "<details>\n<summary>Texto reconocido de este tramo</summary>\n\n"
+                    + _transcripcion_cruda_md(segs_chunk, origen, "### Registro del tramo")
+                    + "\n</details>\n")
             usadas = set(extraer_referencias_img(tejido))
             total_seleccionadas += len(seleccionadas)
             total_usadas += len(usadas)
@@ -7702,7 +7861,9 @@ def consolidar_parte(d: Path, parte: int, t_ini: float, t_fin: float,
         if slide.get("media_reference")
         and slide.get("visual_role") != "sin_valor"
     }
-    if _leccion_demasiado_corta(cuerpo_final, segs) and "Transcripcion cruda" not in cuerpo_final:
+    if (_leccion_demasiado_corta(cuerpo_final, segs)
+            and "Transcripcion cruda" not in cuerpo_final
+            and "Texto reconocido de este tramo" not in cuerpo_final):
         cuerpo_final = cuerpo_final.rstrip() + "\n\n" + _transcripcion_cruda_md(segs, origen)
 
     destino.write_text(cabecera + "\n\n" + eliminar_otras_pantallas(cuerpo_final).strip()
@@ -7796,15 +7957,43 @@ def consolidar_parte(d: Path, parte: int, t_ini: float, t_fin: float,
     print(f"[post] escrito {destino}")
     return destino
 
-def extraer_tareas(d: Path, contenido: str, clase_id: str) -> str | None:
-    """Detecta tareas dejadas en clase; las anexa a la lección y a contenido/TAREAS.md."""
+def _consultar_tareas(contenido: str) -> str | None:
     if not _post_llm_enabled():
         print("[post] tareas: extracción LLM omitida por CLASE_POST_LLM=0")
         return None
-    r = preguntar([{"role": "system", "content": PROMPT_TAREAS},
-                   {"role": "user", "content": contenido[:30000]}],
-                  max_tokens=800, etiqueta="post-tareas", thinking=False)
-    if _respuesta_vacia(r) or "SIN_TAREAS" in str(r):
+    texto = study_package.strip_source_transcript(study_package.strip_metadata(contenido))
+    # Las tarjetas visuales repetidas no aportan encargos. Las tablas de datos,
+    # párrafos y el final de la clase sí deben entrar completos en la extracción.
+    texto = re.sub(r"(?m)^\|[^\n]*<img\b[^\n]*\|[ \t]*$", "", texto)
+    texto = re.sub(r"(?is)<details\b[^>]*>.*?</details>", "", texto).strip()
+    tareas: list[str] = []
+    while texto:
+        corte = len(texto)
+        if corte > 30000:
+            corte = max(texto.rfind("\n\n", 0, 30000), texto.rfind("\n", 0, 30000))
+            if corte <= 0:
+                corte = texto.rfind(" ", 0, 30000)
+            if corte <= 0:
+                corte = 30000
+        bloque, texto = texto[:corte], texto[corte:].lstrip()
+        r = preguntar([{"role": "system", "content": PROMPT_TAREAS},
+                       {"role": "user", "content": bloque}],
+                      max_tokens=1600, etiqueta="post-tareas", thinking=False)
+        _validar_respuesta_api(r, "post-tareas")
+        if _respuesta_vacia(r) or str(r).strip() == "SIN_TAREAS":
+            continue
+        for tarea in re.split(r"(?m)(?=^- \[ \] )", str(r).strip()):
+            if tarea.strip() and tarea.strip() not in tareas:
+                tareas.append(tarea.strip())
+    return "\n".join(tareas) or None
+
+
+def extraer_tareas(d: Path, contenido: str, clase_id: str,
+                  respuesta_preparada=_TAREAS_NO_PREPARADAS) -> str | None:
+    """Publica tareas solo después de que su consulta terminó correctamente."""
+    r = (_consultar_tareas(contenido) if respuesta_preparada is _TAREAS_NO_PREPARADAS
+         else respuesta_preparada)
+    if not r:
         return None
     seccion = ("\n---\n\n## 📋 Tareas detectadas en esta clase\n"
                "> ⬇️ **Descarga AHORA los archivos mencionados** (notebooks/datasets/slides) "
@@ -7823,9 +8012,13 @@ def _sanear_markdown_final(d: Path) -> None:
     for md in list(d.glob("leccion_parte*.md")) + [d / "leccion_final.md",
                                                    d / "leccion_final_eng.md"]:
         if md.is_file():
-            limpio = eliminar_otras_pantallas(md.read_text(encoding="utf-8"))
+            original = md.read_text(encoding="utf-8")
+            limpio = eliminar_otras_pantallas(study_package.strip_source_transcript(original))
             limpio = RE_MD_IMG.sub("", limpio)
             limpio = _filtrar_imgs_autorizadas(limpio, existentes)
+            if (study_package.parse_metadata(original) or {}).get("source_transcript") is not None:
+                limpio, _ = study_package.attach_source_transcript(
+                    limpio, [], previous_markdown=original)
             md.write_text(limpio, encoding="utf-8")
 
 
@@ -7877,11 +8070,28 @@ def _wav_limpieza_segura_por_chunks(cobertura: dict | None) -> bool:
         return False
     if int(cobertura.get("wav_total", 0) or 0) <= 0:
         return False
+    # Un commit STT validado puede concluir con cero segmentos (pausa, ruido o voz
+    # no reconocible). Eso no es trabajo pendiente: el usuario eligió paquete
+    # ligero y la lección avisa de los tramos visuales sin explicación oral.
+    # Un WAV sin texto y sin commit vacío válido sigue reteniendo la evidencia.
+    empty_commits = {
+        Path(str(name)).name
+        for name in cobertura.get("commits_vacios", [])
+        if str(name).strip()
+    }
+    unmatched_without_commit = {
+        Path(str(info.get("archivo") or "")).name
+        for info in cobertura.get("wav_util_sin_transcript", [])
+        if Path(str(info.get("archivo") or "")).name
+    } - empty_commits
+    # Los huecos de captura describen audio que nunca se guardó. No se recuperan
+    # reteniendo WAV ya procesados. La barrera y finalize_lightweight_package
+    # verifican aparte cierre, transcripción archivada e imágenes publicadas.
     return (
         int(cobertura.get("wav_sin_transcript_total", 0) or 0) == 0
+        and int(cobertura.get("stt_invalidos_total", 0) or 0) == 0
         and int(cobertura.get("transcript_wav_faltante_total", 0) or 0) == 0
-        and not cobertura.get("wav_util_sin_transcript")
-        and (cobertura.get("continuidad_audio") or {}).get("status", "ok") != "warning"
+        and not unmatched_without_commit
     )
 
 
@@ -8080,7 +8290,8 @@ def generar_leccion_ingles(d: Path, final_es: str, st: dict) -> Path:
     destino = d / "leccion_final_eng.md"
     piezas = [f"# {st.get('nombre', st.get('clase_id', 'Class notes'))}",
               "> Academic English version. Image references reuse the same `img/` folder.\n"]
-    for i, trozo in enumerate(_trocear_texto(final_es), 1):
+    contenido = study_package.strip_source_transcript(study_package.strip_metadata(final_es))
+    for i, trozo in enumerate(_trocear_texto(contenido), 1):
         r = preguntar([{"role": "system", "content": PROMPT_FINAL_ENG},
                        {"role": "user", "content": trozo}],
                       max_tokens=POST_MAX_TOKENS, etiqueta=f"post-eng-{i}",
@@ -8178,6 +8389,7 @@ def _metadata_paquete_estudio(
         "images": study_package.image_inventory(d, markdown_publico),
         "additional_lessons": study_package.additional_lesson_inventory(d),
         "official_materials": _procedencia_material_oficial_compacta(d),
+        "stt_usage": stt_usage.summarize(d),
     }
 
 
@@ -8556,16 +8768,31 @@ def consolidar_todo(d: Path, forzar: bool = False, limpiar_al_final: bool = Fals
     final_publico = _adornar_encabezados_pedagogicos(
         eliminar_otras_pantallas("\n\n".join(final) + "\n"))
     if _leccion_demasiado_corta(final_publico, segs_procesar or segs_todos):
-        final_publico = final_publico.rstrip() + "\n\n---\n\n" + _transcripcion_cruda_md(
-            segs_procesar or segs_todos, origen)
+        final_publico = (
+            final_publico.rstrip() + "\n\n> **Desarrollo pendiente de revisión:** "
+            "la extensión de la explicación es reducida respecto al texto reconocido. "
+            "El registro completo de lo transcrito se conserva al final para consultar "
+            "los detalles que requieren mayor desarrollo.\n")
     final_publico = math_render.normalizar_matematica_markdown(final_publico)
     metadata_paquete = _metadata_paquete_estudio(
         d, st, rangos_partes, origen, final_publico)
+    final_publico, fuente_transcript = study_package.attach_source_transcript(
+        final_publico, segs_todos,
+        previous_markdown=contexto_previo.get("texto_fuente_previo", ""))
+    metadata_paquete["source_transcript"] = fuente_transcript
     final_txt = (
         study_package.metadata_comment(metadata_paquete)
         + "\n\n"
         + final_publico.lstrip()
     )
+    # Resolver también tareas antes de reemplazar la publicación anterior. Si
+    # la red falla, el usuario conserva su lección previa y todos los WAV.
+    tareas_preparadas = (_consultar_tareas(contenido_partes_txt)
+                        if _EXIGIR_APIS.get() else _TAREAS_NO_PREPARADAS)
+    if _EXIGIR_APIS.get():
+        verificar_barrera_final(d)
+        if est.leer_estado(d).get("estado") != "fin":
+            raise RuntimeError("La clase volvió a grabar; consolidación detenida y audios conservados.")
     study_package.write_text_atomic(d / "leccion_final.md", final_txt)
     cobertura_txt = _reporte_cobertura_textual(final_txt, segs_procesar or segs_todos)
     print(f"[post] leccion_final: {cobertura_txt['leccion_chars']} chars, "
@@ -8579,7 +8806,9 @@ def consolidar_todo(d: Path, forzar: bool = False, limpiar_al_final: bool = Fals
     _actualizar_bitacora_curso(
         d, cmd_path, st["clase_id"], fecha, idioma, resumen)
 
-    tareas = extraer_tareas(d, contenido_partes_txt, st["clase_id"])
+    tareas = (extraer_tareas(d, contenido_partes_txt, st["clase_id"])
+              if tareas_preparadas is _TAREAS_NO_PREPARADAS else
+              extraer_tareas(d, contenido_partes_txt, st["clase_id"], respuesta_preparada=tareas_preparadas))
     if tareas:
         print("\n" + "=" * 62)
         print("TAREAS DETECTADAS EN ESTA CLASE:")
@@ -8596,10 +8825,13 @@ def consolidar_todo(d: Path, forzar: bool = False, limpiar_al_final: bool = Fals
     elif idioma == "en":
         print("[post] versión inglesa omitida; usa --english si necesitas una copia adicional")
 
+    from .lesson_export import export_html
+    export_html(d)
+
     if paquete_ligero:
         print(
-            "[post] paquete ligero: validación pendiente; la evidencia se conserva "
-            "hasta terminar memoria, tareas y contabilidad")
+            "[post] paquete ligero: se validará después de actualizar memoria, "
+            "tareas y contabilidad")
     elif limpiar_al_final and barrera_final.get("ready"):
         limpiar(d, cobertura=cobertura)
     elif limpiar_al_final:
@@ -8637,8 +8869,21 @@ def consolidar_todo(d: Path, forzar: bool = False, limpiar_al_final: bool = Fals
         if evidence_safe:
             reporte_paquete = study_package.finalize_lightweight_package(
                 d, evidence_safe=True)
+            empty_count = int(cobertura.get("commits_vacios_total", 0) or 0)
+            if empty_count:
+                print(
+                    f"[post] cobertura: {empty_count} commits STT terminaron sin "
+                    "segmentos; no se retranscribieron")
+            visual_gaps = cobertura.get("periodos_con_capturas_sin_audio", []) or []
+            if visual_gaps:
+                total_capturas_gap = sum(
+                    int(period.get("capturas_total", 0) or 0)
+                    for period in visual_gaps)
+                print(
+                    f"[post] cobertura visual: {total_capturas_gap} capturas sin "
+                    "texto oral cercano; se conservaron las referenciadas en la lección")
             print(
-                "[post] paquete ligero listo: leccion_final.md + img/; "
+                "[post] paquete ligero listo: Markdown + HTML ligero + img/; "
                 f"{reporte_paquete['images_kept']} imágenes referenciadas conservadas; "
                 f"{reporte_paquete['paths_removed']} rutas auxiliares eliminadas; "
                 f"{reporte_paquete['bytes_removed'] / 1024 / 1024:.1f} MiB liberados")
@@ -8804,13 +9049,20 @@ def main() -> int:
         return 1
 
     paquete_ligero = not bool(args.conservar_evidencia or args.sin_limpiar)
-    consolidar_todo(d, args.forzar,
-                    limpiar_al_final=paquete_ligero,
-                    modo_estudio=args.modo_estudio,
-                    paquete_ligero=paquete_ligero,
-                    permitir_parcial=args.parcial,
-                    materiales=args.material,
-                    generar_ingles=args.english)
+    def run_post(_target, **_kwargs):
+        with api_errors_fatal():
+            consolidar_todo(d, args.forzar,
+                            limpiar_al_final=paquete_ligero,
+                            modo_estudio=args.modo_estudio,
+                            paquete_ligero=paquete_ligero,
+                            permitir_parcial=args.parcial,
+                            materiales=args.material,
+                            generar_ingles=args.english)
+    if args.parcial:
+        run_post(d)
+    else:
+        from . import consolidation_recovery
+        consolidation_recovery.consolidate(d, light=paquete_ligero, post_fn=run_post)
     return 0
 
 

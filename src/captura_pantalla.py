@@ -1,7 +1,6 @@
 """Captura la pantalla cuando CAMBIA (nueva diapositiva, código, pizarra) usando dhash.
 
-- LIVIANO: guarda JPEG calidad 85 reescalado a máx. 1920 px de ancho (una 34" en PNG
-  pesaría 3-6 MB por captura; así queda en ~200-400 KB perfectamente legible).
+- LIVIANO: guarda WebP calidad 85, con el ancho máximo configurado.
 - MULTI-MONITOR: captura el monitor indicado en el estado de la sesión (comando /monitor
   del copiloto o elegido al iniciar), con fallback a CLASE_MONITOR del .env.
   CLASE_REGION (recorte fijo) tiene prioridad sobre todo.
@@ -10,22 +9,19 @@
 """
 import sys
 import time
+from collections import OrderedDict
 from contextlib import nullcontext
 from dataclasses import dataclass
 from io import BytesIO
-from collections import OrderedDict
 from pathlib import Path
 from typing import Callable
 
 import mss
 from PIL import Image
 
-from . import config
+from . import config, imagen, ocr, visual_idle
 from . import estado as est
-from . import imagen
-from . import ocr
-from . import visual_idle
-
+from .image_optimization import encode_webp
 from .visual_runtime import (
     VisualGate,
     VisualRuntimeMetrics,
@@ -138,7 +134,7 @@ def capturar_ahora(sct=None, monitor: int | None = None,
 
 
 def preparar_evidencia(img: Image.Image) -> Image.Image:
-    """Normaliza una sola vez la imagen que compartirán OCR y JPEG."""
+    """Normaliza una sola vez la imagen que compartirán OCR y WebP."""
     if img.width > config.CAPTURA_ANCHO_MAX:
         alto = round(img.height * config.CAPTURA_ANCHO_MAX / img.width)
         return img.resize((config.CAPTURA_ANCHO_MAX, alto), Image.LANCZOS)
@@ -147,8 +143,13 @@ def preparar_evidencia(img: Image.Image) -> Image.Image:
 
 def codificar_jpeg(img: Image.Image) -> bytes:
     salida = BytesIO()
-    img.save(salida, format="JPEG", quality=config.CAPTURA_CALIDAD)
+    img.save(salida, format="JPEG", quality=config.CAPTURA_CALIDAD,
+             optimize=True, progressive=True)
     return salida.getvalue()
+
+
+def codificar_webp(img: Image.Image) -> bytes:
+    return encode_webp(img, quality=config.CAPTURA_CALIDAD)
 
 
 def persistir_jpeg_atomico(contenido: bytes, destino: Path) -> None:
@@ -160,9 +161,11 @@ def persistir_jpeg_atomico(contenido: bytes, destino: Path) -> None:
 
 
 def guardar_liviana(img: Image.Image, destino) -> None:
-    """Reescala, comprime y guarda como JPEG (atómico)."""
+    """Guarda WebP 85; JPEG solo para consumidores legacy explícitos."""
     canonica = preparar_evidencia(img)
-    persistir_jpeg_atomico(codificar_jpeg(canonica), Path(destino))
+    path = Path(destino)
+    contenido = codificar_webp(canonica) if path.suffix.lower() == ".webp" else codificar_jpeg(canonica)
+    persistir_jpeg_atomico(contenido, path)
 
 
 def decision_idle_con_audio(
@@ -306,10 +309,10 @@ class VisualEvidencePipeline:
 
     def _new_filename(self, epoch: float, parte: int) -> str:
         base = f"cap_{int(epoch):012d}_p{int(parte)}"
-        nombre = f"{base}.jpg"
+        nombre = f"{base}.webp"
         while nombre in self._issued_names or (self.img_dir / nombre).exists():
             self._sequence += 1
-            nombre = f"{base}_{self._sequence:03d}.jpg"
+            nombre = f"{base}_{self._sequence:03d}.webp"
         self._issued_names.add(nombre)
         return nombre
 
@@ -478,7 +481,7 @@ class VisualEvidencePipeline:
             contenido = b""
             if self.save_jpeg:
                 with self.metrics.stage("compression"):
-                    contenido = codificar_jpeg(canonical)
+                    contenido = codificar_webp(canonical)
             # La revalidación ocurre después de OCR/compresión y justo antes del commit.
             if not self._commit_allowed(commit_validator):
                 self.metrics.increment("frames_discarded")
@@ -620,7 +623,7 @@ def registrar_observacion_visual(
         or hash_ambiguo_sin_ocr or checkpoint_sin_ocr
     )
     if cambio or not ultimo_archivo:
-        nombre = f"cap_{int(epoch):012d}_p{int(parte)}.jpg"
+        nombre = f"cap_{int(epoch):012d}_p{int(parte)}.webp"
         guardar_liviana(img, img_dir / nombre)
         motivos = []
         if ultimo_hash is None:
@@ -714,7 +717,7 @@ def modo_test() -> int:
         f"{i}={m['width']}x{m['height']}@({m['left']},{m['top']})"
         for i, m in enumerate(mons, 1)))
     img = capturar_ahora()
-    destino = config.LOGS_DIR / "test_captura.jpg"
+    destino = config.LOGS_DIR / "test_captura.webp"
     guardar_liviana(img, destino)
     kb = destino.stat().st_size // 1024
     print(f"TEST_OK archivo={destino} original={img.size[0]}x{img.size[1]} "
